@@ -105,13 +105,13 @@ describe("renderUsage", () => {
       rolling: window23,
     }
     const out = renderUsage(data, makeTestTheme())
-    expect(out).toMatch(/update \d{2}:\d{2} \(UTC[+-]?\d+(?::\d{2})?\)/)
+    expect(out).toMatch(/\[muted:\d{2}:\d{2}\]$/)
   })
 
   test("does not append update time when updatedAt is missing", () => {
     const data: NormalizedUsage = { useBalance: false, rolling: window23 }
     const out = renderUsage(data, makeTestTheme())
-    expect(out).not.toContain("update")
+    expect(out).not.toMatch(/\d{2}:\d{2}$/)
   })
 })
 

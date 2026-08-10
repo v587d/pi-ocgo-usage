@@ -167,7 +167,7 @@ OC.go: 5h 23% (3h 25m) · wk 30% (4d 6h) · mo 12% (12d 4h)
 **省略规则**：
 - 任一窗口缺失 → 省略该段（`5h 23% (3h 25m) · mo 12% (12d 4h)`）
 - 仅一个窗口 → 简化为 `OC.go: 5h 23% (3h 25m)`，不加 `·`
-- `updatedAt` 存在 → 加后缀 `· update HH:MM (UTC±H)`（最近一次成功拉取时间，本地时区；`useBalance` 仍解析但不再渲染）
+- `updatedAt` 存在 → 加后缀 `· HH:MM`（最近一次成功拉取时间，本地时区；`useBalance` 仍解析但不再渲染）
 
 **时间格式**（`formatDuration`）：
 - `< 60s` → `45s`

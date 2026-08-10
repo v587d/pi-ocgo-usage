@@ -20,11 +20,21 @@ A [Pi coding agent](https://pi.dev/) extension that displays [OpenCode Go](https
 
 ## Install
 
+### From GitHub (recommended for testing)
+
+```bash
+pi install https://github.com/v587d/pi-ocgo-usage.git
+```
+
+This clones the repo (which ships a pre-built `dist/`) and registers the extension in your `~/.pi/agent/settings.json`.
+
+### From npm (after first release)
+
 ```bash
 pi install npm:pi-ocgo-usage
 ```
 
-Or from a local checkout:
+### From a local checkout (development)
 
 ```bash
 git clone https://github.com/v587d/pi-ocgo-usage.git
@@ -33,6 +43,8 @@ bun install
 bun run build
 pi install ./
 ```
+
+> Note: `pi install` uses `--ignore-scripts`, so `prepare` and `postinstall` hooks won't run. The repo ships a pre-built `dist/` for GitHub installs; for local development, run `bun run build` after install.
 
 ## Configuration
 

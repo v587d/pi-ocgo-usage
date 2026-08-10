@@ -188,13 +188,17 @@ function diagnosticHints(code: string): string {
   switch (code) {
     case "http500":
       return [
-        "Common causes of http500:",
-        "  - cookie has been invalidated (sign-out, password change, or the leaked",
-        "    cookie from this chat history was already revoked)",
+        "MOST LIKELY: cookie is invalid/expired (opencode returns 500 instead of 401",
+        "for Iron Session cookie failures). The only fix is to re-login at",
+        "https://opencode.ai and paste a fresh cookie via /oc-go-config set.",
+        "",
+        "Other causes:",
         "  - workspaceID has no active Go subscription",
         "  - the opencode.ai backend is having a transient error",
-        "Try: 1) re-login to opencode.ai and re-paste the cookie, 2) verify the",
-        "workspaceID matches a workspace you own that has Go enabled.",
+        "",
+        "Tip: run /tmp/diag-ocgo.sh to confirm — it shows the real HTTP status",
+        "for your cookie against /zen/go/v1/models (API key gateway) and the",
+        "/_server endpoint we use. 302 / 401 / 500 on the second = cookie problem.",
       ].join("\n")
     case "http401":
       return [

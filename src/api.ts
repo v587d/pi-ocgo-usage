@@ -17,6 +17,7 @@
  */
 
 import type { ModelRegistry } from "@earendil-works/pi-coding-agent"
+import { Temporal } from "temporal-polyfill"
 import { loadConfig } from "./config"
 import type { FetchMode, NormalizedUsage, OCGoConfig, UsageWindow, UsageWindowKind } from "./types"
 
@@ -348,12 +349,17 @@ export async function fetchUsage(
   let lastError: unknown
   for (const path of paths) {
     try {
-      return await path.fn()
+      return stampUpdatedAt(await path.fn())
     } catch (e) {
       lastError = e
     }
   }
   throw lastError instanceof Error ? lastError : new UsageError(String(lastError), "fetch")
+}
+
+/** Attach the fetch timestamp so the footer can show data freshness. */
+function stampUpdatedAt(data: NormalizedUsage): NormalizedUsage {
+  return { ...data, updatedAt: Temporal.Now.instant().epochMilliseconds }
 }
 
 interface PathEntry {

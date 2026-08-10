@@ -7,6 +7,7 @@
 
 import { describe, expect, test } from "bun:test"
 import type { Theme } from "@alexanderfortin/pi-usage-lib"
+import { Temporal } from "temporal-polyfill"
 import { formatDuration, LABEL, renderError, renderUsage } from "../src/render"
 import type { NormalizedUsage } from "../src/types"
 
@@ -97,16 +98,20 @@ describe("renderUsage", () => {
     expect(renderUsage(data, makeTestTheme())).toBeUndefined()
   })
 
-  test("appends useBalance suffix when useBalance is true", () => {
-    const data: NormalizedUsage = { useBalance: true, rolling: window23 }
+  test("appends update time when updatedAt is present", () => {
+    const data: NormalizedUsage = {
+      useBalance: false,
+      updatedAt: Temporal.Now.instant().epochMilliseconds,
+      rolling: window23,
+    }
     const out = renderUsage(data, makeTestTheme())
-    expect(out).toContain("[muted:useBalance]")
+    expect(out).toMatch(/update \d{2}:\d{2} \(UTC[+-]?\d+(?::\d{2})?\)/)
   })
 
-  test("does not append useBalance suffix when useBalance is false", () => {
+  test("does not append update time when updatedAt is missing", () => {
     const data: NormalizedUsage = { useBalance: false, rolling: window23 }
     const out = renderUsage(data, makeTestTheme())
-    expect(out).not.toContain("useBalance")
+    expect(out).not.toContain("update")
   })
 })
 

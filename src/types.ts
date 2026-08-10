@@ -24,7 +24,10 @@ export interface UsageWindow {
 }
 
 export interface NormalizedUsage {
+  /** "Use balance" fallback flag (超额后走 Zen 余额). Parsed but not rendered. */
   readonly useBalance: boolean
+  /** Epoch ms of the last successful fetch (stamped by fetchUsage). */
+  readonly updatedAt?: number
   readonly rolling?: UsageWindow
   readonly weekly?: UsageWindow
   readonly monthly?: UsageWindow

@@ -408,6 +408,8 @@ describe("fetchUsage orchestrator", () => {
     }
     const data = await fetchUsage(registry)
     expect(data.rolling?.percent).toBe(23)
+    // fetchUsage stamps the fetch time for the footer's freshness display
+    expect(data.updatedAt).toBeTypeOf("number")
     // The registry.getApiKeyForProvider should not have been called
     expect(registry.getApiKeyForProvider).not.toHaveBeenCalled()
   })

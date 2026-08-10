@@ -11,6 +11,7 @@
  */
 
 import { colorForPercentage, type Theme } from "@alexanderfortin/pi-usage-lib"
+import { Temporal } from "temporal-polyfill"
 import type { NormalizedUsage, UsageWindow, UsageWindowKind } from "./types"
 
 /** Top-level label shown before the colon in the footer. */
@@ -39,9 +40,36 @@ export function renderUsage(data: NormalizedUsage, theme: Theme): string | undef
 
   const head = theme.fg("muted", `${LABEL}:`)
   const segments = parts.join(` ${theme.fg("dim", "·")} `)
-  const tail = data.useBalance ? ` ${theme.fg("dim", "·")} ${theme.fg("muted", "useBalance")}` : ""
+  const tail =
+    data.updatedAt !== undefined
+      ? ` ${theme.fg("dim", "·")} ${theme.fg("muted", formatUpdatedAt(data.updatedAt))}`
+      : ""
 
   return head + segments + tail
+}
+
+/**
+ * Format a fetch timestamp (epoch ms) as "update HH:MM (UTC+8)" in the local
+ * timezone, using Temporal only (no Date API). The UTC offset label is the
+ * system's current offset (e.g. "+08:00" -> "UTC+8").
+ */
+function formatUpdatedAt(updatedAt: number): string {
+  const timeZone = Temporal.Now.timeZoneId()
+  const zdt = Temporal.Instant.fromEpochMilliseconds(updatedAt).toZonedDateTimeISO(timeZone)
+  const hh = String(zdt.hour).padStart(2, "0")
+  const mm = String(zdt.minute).padStart(2, "0")
+  const offset = Temporal.Now.zonedDateTimeISO(timeZone).offset
+  return `update ${hh}:${mm} (${utcOffsetLabel(offset ?? "UTC")})`
+}
+
+/** "+08:00" -> "UTC+8", "-05:30" -> "UTC-5:30", fallback: raw offset. */
+function utcOffsetLabel(offset: string): string {
+  const m = /^([+-])(\d{2})(?::(\d{2}))?$/.exec(offset)
+  if (!m) return offset
+  const sign = m[1]
+  const hours = m[2] !== undefined ? Number.parseInt(m[2], 10) : 0
+  const minutes = m[3] ? Number.parseInt(m[3], 10) : 0
+  return minutes === 0 ? `UTC${sign}${hours}` : `UTC${sign}${hours}:${minutes}`
 }
 
 function renderWindow(w: UsageWindow, theme: Theme): string {

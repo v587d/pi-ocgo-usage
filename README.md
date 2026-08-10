@@ -111,7 +111,7 @@ OC.go: 5h 23% (3h 25m) · wk 30% (4d 6h) · mo 12% (12d 4h)
 
 - Each window: `<label> <percent>% (<time remaining>)`
 - Color: muted → warning (≥80%) → error (≥90% or rate-limited)
-- If `useBalance` is enabled: appended as `· useBalance`
+- On successful fetch: appended as `· update 14:32 (UTC+8)` — local time of the last successful refresh, so you can see how stale the data is
 - If any window is missing (e.g., new account): that segment is omitted
 
 Footer is **cleared** when switching to a non-OpenCode-Go model or on session shutdown.
@@ -130,11 +130,14 @@ The page renders each usage window as a `data-slot="usage-item"` block; the exte
 ```jsonc
 {
   "useBalance": true,
+  "updatedAt": 1786335000000,
   "rolling": { "percent": 80, "resetInSec": 3840,  "status": "ok" },
   "weekly":  { "percent": 32, "resetInSec": 586800,"status": "ok" },
   "monthly": { "percent": 66, "resetInSec": 939600,"status": "ok" }
 }
 ```
+
+`updatedAt` (epoch ms) is stamped by `fetchUsage` on every successful fetch and rendered as the footer's `· update HH:MM (UTC+8)` freshness indicator (local timezone). `useBalance` (whether over-limit usage falls back to your Zen balance) is still parsed but no longer rendered.
 
 ### Official API auto-switch ([anomalyco/opencode#16513](https://github.com/anomalyco/opencode/pull/16513))
 

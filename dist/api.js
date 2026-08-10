@@ -15,6 +15,7 @@
  * Both paths adapt to the internal `NormalizedUsage` shape so the renderer
  * is path-agnostic.
  */
+import { Temporal } from "temporal-polyfill";
 import { loadConfig } from "./config";
 // ============================================================================
 // Errors
@@ -271,13 +272,17 @@ export async function fetchUsage(registry) {
     let lastError;
     for (const path of paths) {
         try {
-            return await path.fn();
+            return stampUpdatedAt(await path.fn());
         }
         catch (e) {
             lastError = e;
         }
     }
     throw lastError instanceof Error ? lastError : new UsageError(String(lastError), "fetch");
+}
+/** Attach the fetch timestamp so the footer can show data freshness. */
+function stampUpdatedAt(data) {
+    return { ...data, updatedAt: Temporal.Now.instant().epochMilliseconds };
 }
 function buildPathList(cfg, registry) {
     const paths = [];

@@ -20,7 +20,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { NormalizedUsage } from "./types";
 /** Stable public type alias for the normalized usage payload. */
 export type UsageData = NormalizedUsage;
-export { fetchUsage, fetchViaApikey, fetchViaCookie, fromApikeyResponse, fromCookieResponse, UsageError, } from "./api";
+export { fetchUsage, fetchViaApikey, fetchViaCookie, fromApikeyResponse, fromSSRHTML, parseDurationToSec, UsageError, } from "./api";
 export { configFilePath, loadConfig } from "./config";
 export { runOcgoConfig } from "./config-cmd";
 export { isOpencodeGoProvider, PROVIDER_PREFIX } from "./provider";

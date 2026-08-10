@@ -233,15 +233,12 @@ describe("runOcgoConfig: test", () => {
       globalThis.fetch = mock(
         async () =>
           new Response(
-            JSON.stringify({
-              mine: true,
-              useBalance: false,
-              region: "us",
-              rollingUsage: { status: "ok", resetInSec: 100, usagePercent: 10 },
-              weeklyUsage: { status: "ok", resetInSec: 200, usagePercent: 20 },
-              monthlyUsage: { status: "ok", resetInSec: 300, usagePercent: 30 },
-            }),
-            { status: 200, headers: { "Content-Type": "application/json" } },
+            `<div data-slot="usage-item">
+               <span data-slot="usage-label">Rolling Usage</span>
+               <span data-slot="usage-value"><!--$-->10<!--/-->%</span>
+               <span data-slot="reset-time"><!--$-->Resets in<!--/-->5 hours<!--/--></span>
+             </div></div>`,
+            { status: 200, headers: { "Content-Type": "text/html" } },
           ),
       ) as unknown as typeof fetch
       try {

@@ -11,7 +11,7 @@ import defaultExport, {
   configFilePath,
   formatDuration,
   fromApikeyResponse,
-  fromCookieResponse,
+  fromSSRHTML,
   isOpencodeGoProvider,
   LABEL,
   loadConfig,
@@ -31,7 +31,7 @@ describe("entry point", () => {
     expect(typeof renderError).toBe("function")
     expect(typeof formatDuration).toBe("function")
     expect(typeof isOpencodeGoProvider).toBe("function")
-    expect(typeof fromCookieResponse).toBe("function")
+    expect(typeof fromSSRHTML).toBe("function")
     expect(typeof fromApikeyResponse).toBe("function")
     expect(typeof loadConfig).toBe("function")
     expect(typeof configFilePath).toBe("function")

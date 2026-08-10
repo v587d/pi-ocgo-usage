@@ -35,7 +35,8 @@ export {
   fetchViaApikey,
   fetchViaCookie,
   fromApikeyResponse,
-  fromCookieResponse,
+  fromSSRHTML,
+  parseDurationToSec,
   UsageError,
 } from "./api"
 export { configFilePath, loadConfig } from "./config"

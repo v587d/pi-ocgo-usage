@@ -2,18 +2,18 @@
  * HTTP fetch + response adapters for pi-ocgo-usage
  *
  * Two paths:
- *  1. Cookie path (B2, main): reverse-engineered from opencode console's
- *     SolidStart server function. Endpoint:
- *       GET /_server?id=lite.subscription.get&workspaceID=<wrk>
- *       Cookie: auth=<Iron-session>; oc_locale=...
+ *  1. Cookie path (B2, main): GET /workspace/<wrk>/go HTML SSR scrape.
+ *     The dashboard renders usage values inline in `data-slot="usage-item"`
+ *     blocks. This is the only cookie-authenticated way to read usage today.
  *
  *  2. Apikey path (B, future fallback): the proposed official API from
  *     [anomalyco/opencode#16513]. Endpoint:
  *       GET /zen/go/v1/usage
  *       Authorization: Bearer <opencode-go-api-key>
+ *     Auto-enabled when the PR ships; until then, this path always 404s.
  *
- * Both adapt to the internal `NormalizedUsage` shape so the renderer is
- * path-agnostic.
+ * Both paths adapt to the internal `NormalizedUsage` shape so the renderer
+ * is path-agnostic.
  */
 import { loadConfig } from "./config";
 // ============================================================================
@@ -28,6 +28,7 @@ export class UsageError extends Error {
         this.code = code;
     }
 }
+/** JSON fetch with structured errors (used by the apikey path). */
 async function safeFetch(url, init, timeoutMs) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -59,11 +60,37 @@ async function safeFetch(url, init, timeoutMs) {
         clearTimeout(timer);
     }
 }
-/** Strip any query param that might contain secrets for error messages */
+/** Text fetch with structured errors (used by the cookie SSR path). */
+async function safeFetchText(url, init, timeoutMs) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+        const res = await fetch(url, {
+            method: init.method ?? "GET",
+            headers: init.headers,
+            signal: controller.signal,
+        });
+        if (!res.ok) {
+            throw new UsageError(`HTTP ${res.status} for ${sanitizeUrl(url)}`, `http${res.status}`);
+        }
+        return await res.text();
+    }
+    catch (e) {
+        if (e instanceof UsageError)
+            throw e;
+        if (e instanceof Error && e.name === "AbortError") {
+            throw new UsageError(`Request timed out after ${timeoutMs}ms`, "timeout");
+        }
+        throw new UsageError(String(e instanceof Error ? e.message : e), "fetch");
+    }
+    finally {
+        clearTimeout(timer);
+    }
+}
+/** Strip query params from a URL for safe error messages. */
 function sanitizeUrl(url) {
     try {
         const u = new URL(url);
-        // _server IDs and workspace IDs are not secret, but strip anyway
         return `${u.protocol}//${u.host}${u.pathname}`;
     }
     catch {
@@ -74,25 +101,122 @@ export async function fetchViaCookie(cfg) {
     if (!cfg.cookie || !cfg.workspaceID) {
         throw new UsageError("Missing cookie or workspaceID for cookie path", "noconfig");
     }
-    const url = `${cfg.baseUrl}/_server?id=lite.subscription.get&workspaceID=${encodeURIComponent(cfg.workspaceID)}`;
-    const data = (await safeFetch(url, { headers: { Cookie: cfg.cookie, Accept: "application/json" } }, cfg.timeoutMs));
-    return fromCookieResponse(data);
+    const url = `${cfg.baseUrl}/workspace/${encodeURIComponent(cfg.workspaceID)}/go`;
+    const html = await safeFetchText(url, { headers: { Cookie: cfg.cookie, Accept: "text/html" } }, cfg.timeoutMs);
+    return fromSSRHTML(html);
 }
-export function fromCookieResponse(data) {
-    return {
-        useBalance: data.useBalance === true,
-        ...mapIfPresent(data.rollingUsage, "rolling", (w) => makeCookieWindow("rolling", w)),
-        ...mapIfPresent(data.weeklyUsage, "weekly", (w) => makeCookieWindow("weekly", w)),
-        ...mapIfPresent(data.monthlyUsage, "monthly", (w) => makeCookieWindow("monthly", w)),
+/**
+ * Parse the opencode console SSR HTML page and extract the three usage
+ * windows. Reset times are emitted as English phrases inside
+ * `data-slot="reset-time"` (e.g. "Resets in 2 hours 29 minutes"). We parse
+ * them into a coarse `resetInSec` estimate; precise second-level resets are
+ * not needed for the footer display.
+ */
+export function fromSSRHTML(html) {
+    // Each usage-item is a `<div data-slot="usage-item">...</div>` block, but
+    // the markup inside may itself contain nested divs (usage-header,
+    // progress bar, ...). Instead of trying to find the block's closing tag
+    // with a regex, we slice between consecutive item start tags — that keeps
+    // the whole block (including any nested divs) in one piece.
+    const itemStartRe = /<div[^>]*data-slot="usage-item"/g;
+    const starts = [];
+    let startMatch = itemStartRe.exec(html);
+    while (startMatch !== null) {
+        starts.push(startMatch.index);
+        startMatch = itemStartRe.exec(html);
+    }
+    const items = [];
+    for (let i = 0; i < starts.length; i++) {
+        const block = html.slice(starts[i], starts[i + 1] ?? html.length);
+        const labelMatch = block.match(/data-slot="usage-label"[^>]*>([^<]+)</);
+        const valueMatch = block.match(/data-slot="usage-value"[\s\S]*?<!--\$-->\s*(\d+)\s*<!--\/-->/);
+        const resetMatch = block.match(/data-slot="reset-time"[\s\S]*?Resets in(?:<!--\/-->\s*)?([\s\S]*?)(?:<!--\/-->|<\/span>)/);
+        if (!labelMatch || !valueMatch)
+            continue;
+        const label = labelMatch[1]?.trim() ?? "";
+        const percent = Number.parseInt(valueMatch[1] ?? "0", 10);
+        const resetsIn = resetMatch ? stripHtmlComments(resetMatch[1] ?? "").trim() : "";
+        items.push({ label, percent, resetsIn });
+    }
+    const result = {
+        useBalance: html.includes("useBalance"),
     };
+    for (const item of items) {
+        const kind = labelToKind(item.label);
+        if (!kind)
+            continue;
+        result[kind] = {
+            kind,
+            percent: clampPercent(item.percent),
+            resetInSec: parseDurationToSec(item.resetsIn),
+            status: item.percent >= 100 ? "rate-limited" : "ok",
+        };
+    }
+    return result;
 }
-function makeCookieWindow(kind, raw) {
-    return {
-        kind,
-        percent: clampPercent(asNumber(raw.usagePercent)),
-        resetInSec: clampReset(asNumber(raw.resetInSec)),
-        status: raw.status === "rate-limited" ? "rate-limited" : "ok",
-    };
+function labelToKind(label) {
+    const lower = label.toLowerCase();
+    if (lower.startsWith("rolling"))
+        return "rolling";
+    if (lower.startsWith("weekly"))
+        return "weekly";
+    if (lower.startsWith("monthly"))
+        return "monthly";
+    return undefined;
+}
+/** Strip SolidStart HTML comments `<!-- ... -->` from a string. */
+function stripHtmlComments(s) {
+    return s.replace(/<!--[\s\S]*?-->/g, "").trim();
+}
+/**
+ * Parse a human duration phrase into seconds. Examples:
+ *   "2 hours 29 minutes" → 8940
+ *   "45 minutes"          → 2700
+ *   "5 days"              → 432000
+ *   "30 seconds"          → 30
+ *
+ * Returns 0 on unrecognized input.
+ */
+export function parseDurationToSec(phrase) {
+    if (!phrase)
+        return 0;
+    const p = phrase.trim().replace(/\s+/g, " ").toLowerCase();
+    if (!p)
+        return 0;
+    const re = /(\d+)\s*(second|minute|hour|day|week|month|year)s?/g;
+    let total = 0;
+    let matched = false;
+    let m = re.exec(p);
+    while (m !== null) {
+        const n = Number.parseInt(m[1] ?? "0", 10);
+        const unit = m[2] ?? "";
+        matched = true;
+        switch (unit) {
+            case "second":
+                total += n;
+                break;
+            case "minute":
+                total += n * 60;
+                break;
+            case "hour":
+                total += n * 3600;
+                break;
+            case "day":
+                total += n * 86400;
+                break;
+            case "week":
+                total += n * 604800;
+                break;
+            case "month":
+                total += n * 2592000; // 30 days; coarse but adequate for display
+                break;
+            case "year":
+                total += n * 31536000;
+                break;
+        }
+        m = re.exec(p);
+    }
+    return matched ? total : 0;
 }
 export async function fetchViaApikey(cfg, apiKey) {
     const url = `${cfg.baseUrl}/zen/go/v1/usage`;
@@ -110,8 +234,6 @@ export function fromApikeyResponse(data) {
 function makeApikeyWindow(kind, raw) {
     const usage = asNumber(raw.usage) ?? 0;
     const limit = asNumber(raw.limit) ?? 0;
-    // Note: `usage` and `limit` are in micro-cents internally, but the ratio is
-    // dimensionless so we can compute percentage directly.
     const pct = limit > 0 ? Math.min(100, Math.floor((usage / limit) * 100)) : 0;
     const resetMs = parseIsoToMs(asString(raw.resetsAt)) - Date.now();
     const resetInSec = Number.isFinite(resetMs) ? Math.max(0, Math.floor(resetMs / 1000)) : 0;
@@ -146,9 +268,6 @@ export async function fetchUsage(registry) {
     if (paths.length === 0) {
         throw new UsageError("No usable config (set OPENCODE_GO_COOKIE + OPENCODE_GO_WORKSPACE_ID, or log in via /connect for opencode-go)", "noconfig");
     }
-    // In v0.1, only one path is enabled at a time per mode; for safety, try each
-    // in order and return the first success, propagating the LAST error if all
-    // fail. This means "auto" mode today never tries apikey (PR not merged).
     let lastError;
     for (const path of paths) {
         try {
@@ -229,10 +348,5 @@ function clampPercent(n) {
     if (n === undefined)
         return 0;
     return Math.max(0, Math.min(100, Math.floor(n)));
-}
-function clampReset(n) {
-    if (n === undefined)
-        return 0;
-    return Math.max(0, Math.floor(n));
 }
 //# sourceMappingURL=api.js.map

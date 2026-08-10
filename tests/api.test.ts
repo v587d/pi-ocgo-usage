@@ -1,21 +1,33 @@
 /**
  * Tests for src/api.ts
  *
- * - `fromCookieResponse` and `fromApikeyResponse` are pure functions and
+ * - `fromSSRHTML` (cookie path) and `fromApikeyResponse` are pure functions and
  *   fully covered here.
  * - HTTP-fetching functions are tested with a mocked `fetch` global.
  */
 
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test"
-import { fromApikeyResponse, fromCookieResponse, UsageError } from "../src/api"
+import { mkdtempSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import type { OCGoConfig } from "../src/types"
 import apikeyUsageEmpty from "./fixtures/apikey-usage-empty.json"
 import apikeyUsageOk from "./fixtures/apikey-usage-ok.json"
 import apikeyUsageRateLimited from "./fixtures/apikey-usage-rate-limited.json"
-import cookieUsageMalformed from "./fixtures/cookie-usage-malformed.json"
-import cookieUsageOk from "./fixtures/cookie-usage-ok.json"
-import cookieUsagePartial from "./fixtures/cookie-usage-partial.json"
-import cookieUsageRateLimited from "./fixtures/cookie-usage-rate-limited.json"
+
+// The fetchUsage orchestrator tests call loadConfig() internally, which reads
+// the real config file at ~/.pi/agent/pi-ocgo-usage.json via homedir(). Point
+// homedir() at an empty temp dir so tests never see the user's real config
+// (same pattern as tests/config.test.ts). This must happen before the first
+// import of ../src/api, hence the top-level await below.
+const fakeHome = mkdtempSync(join(tmpdir(), "pi-ocgo-usage-test-"))
+mock.module("node:os", () => {
+  const real = require("node:os") as typeof import("node:os")
+  return { ...real, homedir: () => fakeHome }
+})
+const { fromApikeyResponse, fromSSRHTML, parseDurationToSec, UsageError } = await import(
+  "../src/api"
+)
 
 const baseConfig: OCGoConfig = {
   cookie: "auth=test-cookie; oc_locale=zh",
@@ -27,57 +39,105 @@ const baseConfig: OCGoConfig = {
 }
 
 // ============================================================================
-// Cookie response adapter
+// Cookie SSR HTML adapter
 // ============================================================================
 
-describe("fromCookieResponse", () => {
-  test("normalizes all three windows from a healthy response", () => {
-    const out = fromCookieResponse(cookieUsageOk)
-    expect(out.useBalance).toBe(false)
-    expect(out.rolling).toEqual({
-      kind: "rolling",
-      percent: 23,
-      resetInSec: 12345,
-      status: "ok",
-    })
-    expect(out.weekly).toEqual({
-      kind: "weekly",
-      percent: 30,
-      resetInSec: 604800,
-      status: "ok",
-    })
-    expect(out.monthly).toEqual({
-      kind: "monthly",
-      percent: 12,
-      resetInSec: 2592000,
-      status: "ok",
-    })
+describe("fromSSRHTML", () => {
+  test("extracts all three usage windows from a realistic page", () => {
+    const html = `
+      <html><body>
+        <div data-slot="usage-item">
+          <div data-slot="usage-header"><span data-slot="usage-label">Rolling Usage</span>
+          <span data-slot="usage-value"><!--$-->68<!--/-->%</span></div>
+          <div data-slot="progress"><div style="width:68%"></div></div>
+          <span data-slot="reset-time"><!--$-->Resets in<!--/--> <!--$-->2 hours 29 minutes<!--/--></span>
+        </div></div>
+        <div data-slot="usage-item">
+          <div data-slot="usage-header"><span data-slot="usage-label">Weekly Usage</span>
+          <span data-slot="usage-value"><!--$-->27<!--/-->%</span></div>
+          <span data-slot="reset-time"><!--$-->Resets in<!--/--> <!--$-->6 days 21 hours<!--/--></span>
+        </div></div>
+        <div data-slot="usage-item">
+          <div data-slot="usage-header"><span data-slot="usage-label">Monthly Usage</span>
+          <span data-slot="usage-value"><!--$-->5<!--/-->%</span></div>
+          <span data-slot="reset-time"><!--$-->Resets in<!--/--> <!--$-->25 days<!--/--></span>
+        </div></div>
+      </body></html>
+    `
+    const out = fromSSRHTML(html)
+    expect(out.rolling?.percent).toBe(68)
+    expect(out.weekly?.percent).toBe(27)
+    expect(out.monthly?.percent).toBe(5)
+    expect(out.rolling?.resetInSec).toBe(2 * 3600 + 29 * 60)
+    expect(out.weekly?.resetInSec).toBe(6 * 86400 + 21 * 3600)
+    expect(out.monthly?.resetInSec).toBe(25 * 86400)
+    expect(out.rolling?.status).toBe("ok")
   })
 
-  test("maps rate-limited status correctly", () => {
-    const out = fromCookieResponse(cookieUsageRateLimited)
+  test("marks rate-limited when percent >= 100", () => {
+    const html = `
+      <div data-slot="usage-item">
+        <div data-slot="usage-label">Rolling Usage</div>
+        <span data-slot="usage-value"><!--$-->100<!--/-->%</span>
+        <span data-slot="reset-time"><!--$-->Resets in<!--/-->1 hour<!--/--></span>
+      </div></div>
+    `
+    const out = fromSSRHTML(html)
     expect(out.rolling?.status).toBe("rate-limited")
     expect(out.rolling?.percent).toBe(100)
-    expect(out.useBalance).toBe(true)
   })
 
-  test("omits missing windows (e.g. new account without weekly)", () => {
-    const out = fromCookieResponse(cookieUsagePartial)
+  test("omits windows that are not present", () => {
+    const html = `
+      <div data-slot="usage-item">
+        <div data-slot="usage-label">Rolling Usage</div>
+        <span data-slot="usage-value"><!--$-->15<!--/-->%</span>
+        <span data-slot="reset-time">Resets in 1 hour</span>
+      </div></div>
+    `
+    const out = fromSSRHTML(html)
     expect(out.rolling).toBeDefined()
     expect(out.weekly).toBeUndefined()
     expect(out.monthly).toBeUndefined()
   })
 
-  test("clamps percent into [0, 100] and parses non-numeric gracefully", () => {
-    const out = fromCookieResponse(cookieUsageMalformed)
-    // rolling: percent 23.7 -> floor 23; resetInSec NaN -> 0
-    expect(out.rolling?.percent).toBe(23)
-    expect(out.rolling?.resetInSec).toBe(0)
-    // weekly: null -> undefined
+  test("returns empty usage for HTML with no usage blocks", () => {
+    const out = fromSSRHTML("<html><body>no usage here</body></html>")
+    expect(out.rolling).toBeUndefined()
     expect(out.weekly).toBeUndefined()
-    // monthly: percent 200 -> clamped 100; status "unknown-status" -> "ok"
-    expect(out.monthly?.percent).toBe(100)
-    expect(out.monthly?.status).toBe("ok")
+    expect(out.monthly).toBeUndefined()
+    expect(out.useBalance).toBe(false)
+  })
+
+  test("detects useBalance from page content", () => {
+    const html = `
+      <div>useBalance</div>
+      <div data-slot="usage-item">
+        <div data-slot="usage-label">Rolling Usage</div>
+        <span data-slot="usage-value"><!--$-->10<!--/-->%</span>
+      </div></div>
+    `
+    expect(fromSSRHTML(html).useBalance).toBe(true)
+  })
+})
+
+describe("parseDurationToSec", () => {
+  test("handles common English phrases", () => {
+    expect(parseDurationToSec("2 hours 29 minutes")).toBe(2 * 3600 + 29 * 60)
+    expect(parseDurationToSec("45 minutes")).toBe(45 * 60)
+    expect(parseDurationToSec("5 days")).toBe(5 * 86400)
+    expect(parseDurationToSec("1 hour")).toBe(3600)
+    expect(parseDurationToSec("30 seconds")).toBe(30)
+    expect(parseDurationToSec("2 weeks")).toBe(2 * 604800)
+  })
+
+  test("returns 0 on empty / unparseable input", () => {
+    expect(parseDurationToSec("")).toBe(0)
+    expect(parseDurationToSec("nothing")).toBe(0)
+  })
+
+  test("is tolerant of extra whitespace", () => {
+    expect(parseDurationToSec("  3  days  ")).toBe(3 * 86400)
   })
 })
 
@@ -158,10 +218,23 @@ describe("UsageError", () => {
   })
 })
 
-describe("fetchViaCookie (mocked fetch)", () => {
+describe("fetchViaCookie (mocked fetch, SSR HTML scrape)", () => {
   const originalFetch = globalThis.fetch
   let lastUrl: string | undefined
   let lastInit: RequestInit | undefined
+
+  const SSR_HTML = `
+    <div data-slot="usage-item">
+      <span data-slot="usage-label">Rolling Usage</span>
+      <span data-slot="usage-value"><!--$-->23<!--/-->%</span>
+      <span data-slot="reset-time"><!--$-->Resets in<!--/-->2 hours<!--/--></span>
+    </div></div>
+    <div data-slot="usage-item">
+      <span data-slot="usage-label">Weekly Usage</span>
+      <span data-slot="usage-value"><!--$-->30<!--/-->%</span>
+      <span data-slot="reset-time"><!--$-->Resets in<!--/-->3 days<!--/--></span>
+    </div></div>
+  `
 
   beforeEach(() => {
     lastUrl = undefined
@@ -169,9 +242,9 @@ describe("fetchViaCookie (mocked fetch)", () => {
     globalThis.fetch = mock(async (url: unknown, init?: RequestInit) => {
       lastUrl = String(url)
       lastInit = init
-      return new Response(JSON.stringify(cookieUsageOk), {
+      return new Response(SSR_HTML, {
         status: 200,
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "text/html" },
       })
     }) as unknown as typeof fetch
   })
@@ -180,16 +253,15 @@ describe("fetchViaCookie (mocked fetch)", () => {
     globalThis.fetch = originalFetch
   })
 
-  test("hits the expected endpoint with Cookie header", async () => {
+  test("hits /workspace/<wrk>/go with Cookie header", async () => {
     const { fetchViaCookie } = await import("../src/api")
     const data = await fetchViaCookie(baseConfig)
     expect(data.rolling?.percent).toBe(23)
-    expect(lastUrl).toBe(
-      "https://example.test/_server?id=lite.subscription.get&workspaceID=wrk_TEST",
-    )
+    expect(data.weekly?.percent).toBe(30)
+    expect(lastUrl).toBe("https://example.test/workspace/wrk_TEST/go")
     expect(lastInit?.headers).toMatchObject({
       Cookie: "auth=test-cookie; oc_locale=zh",
-      Accept: "application/json",
+      Accept: "text/html",
     })
   })
 
@@ -208,14 +280,6 @@ describe("fetchViaCookie (mocked fetch)", () => {
     expect(fetchViaCookie(baseConfig)).rejects.toMatchObject({ code: "http401" })
   })
 
-  test("throws badjson on non-JSON success", async () => {
-    globalThis.fetch = mock(
-      async () => new Response("<html>not json</html>", { status: 200 }),
-    ) as unknown as typeof fetch
-    const { fetchViaCookie } = await import("../src/api")
-    expect(fetchViaCookie(baseConfig)).rejects.toMatchObject({ code: "badjson" })
-  })
-
   test("throws fetch on network error", async () => {
     globalThis.fetch = mock(async () => {
       throw new Error("ECONNREFUSED")
@@ -226,7 +290,6 @@ describe("fetchViaCookie (mocked fetch)", () => {
 
   test("throws timeout on abort", async () => {
     globalThis.fetch = mock(async (_url: unknown, init?: RequestInit) => {
-      // Honor abort by rejecting with AbortError
       return await new Promise<Response>((_resolve, reject) => {
         init?.signal?.addEventListener("abort", () => {
           const err = new Error("aborted")
@@ -236,7 +299,6 @@ describe("fetchViaCookie (mocked fetch)", () => {
       })
     }) as unknown as typeof fetch
     const { fetchViaCookie } = await import("../src/api")
-    // Use a small timeout to keep tests fast
     expect(fetchViaCookie({ ...baseConfig, timeoutMs: 10 })).rejects.toMatchObject({
       code: "timeout",
     })
@@ -314,10 +376,14 @@ describe("fetchUsage orchestrator", () => {
     clearEnv()
     globalThis.fetch = mock(
       async () =>
-        new Response(JSON.stringify(cookieUsageOk), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
+        new Response(
+          `<div data-slot="usage-item">
+             <span data-slot="usage-label">Rolling Usage</span>
+             <span data-slot="usage-value"><!--$-->23<!--/-->%</span>
+             <span data-slot="reset-time"><!--$-->Resets in<!--/-->2 hours<!--/--></span>
+           </div></div>`,
+          { status: 200, headers: { "Content-Type": "text/html" } },
+        ),
     ) as unknown as typeof fetch
   })
   afterEach(() => {

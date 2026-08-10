@@ -195,17 +195,18 @@ function diagnosticHints(code: string): string {
   switch (code) {
     case "http500":
       return [
-        "MOST LIKELY: cookie is invalid/expired (opencode returns 500 instead of 401",
-        "for Iron Session cookie failures). The only fix is to re-login at",
-        "https://opencode.ai and paste a fresh cookie via /oc-go-config set.",
+        "MOST LIKELY: the opencode.ai backend errored while serving the usage page",
+        "(GET /workspace/<wrk>/go). The old /_server JSON endpoint always answered",
+        "500 for cookie auth and is no longer used by this extension.",
         "",
         "Other causes:",
         "  - workspaceID has no active Go subscription",
+        "  - an invalid/expired cookie usually redirects to the login page (302)",
+        "    instead of returning 500 — re-login only helps if you see a 302",
         "  - the opencode.ai backend is having a transient error",
         "",
-        "Tip: run /tmp/diag-ocgo.sh to confirm — it shows the real HTTP status",
-        "for your cookie against /zen/go/v1/models (API key gateway) and the",
-        "/_server endpoint we use. 302 / 401 / 500 on the second = cookie problem.",
+        "Tip: open https://opencode.ai/workspace/<wrk>/go in a logged-in browser and",
+        "check that the usage blocks render; if they do, re-run this test.",
       ].join("\n")
     case "http401":
       return [

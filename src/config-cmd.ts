@@ -172,12 +172,50 @@ export async function runOcgoConfig(args: string, ctx: OcgoCommandContext): Prom
     } catch (e) {
       const code = e instanceof UsageError ? e.code : "fetch"
       const msg = e instanceof Error ? e.message : String(e)
-      // Avoid showing the cookie or full error; just code + short hint
-      ctx.ui.notify(`Failed: <err:${code}> — ${msg.slice(0, 80)}`, "error")
+      // Diagnostic: show full message (no truncation) and common-cause hints.
+      // The message never contains the cookie (sanitizeUrl strips query/host).
+      const hints = diagnosticHints(code)
+      ctx.ui.notify(`Failed: <err:${code}>\n  ${msg}\n${hints}`, "error")
     }
     return { clearStatus: true }
   }
 
   ctx.ui.notify(`Unknown subcommand: ${sub}\n\n${USAGE_HELP}`, "warning")
   return {}
+}
+
+function diagnosticHints(code: string): string {
+  switch (code) {
+    case "http500":
+      return [
+        "Common causes of http500:",
+        "  - cookie has been invalidated (sign-out, password change, or the leaked",
+        "    cookie from this chat history was already revoked)",
+        "  - workspaceID has no active Go subscription",
+        "  - the opencode.ai backend is having a transient error",
+        "Try: 1) re-login to opencode.ai and re-paste the cookie, 2) verify the",
+        "workspaceID matches a workspace you own that has Go enabled.",
+      ].join("\n")
+    case "http401":
+      return [
+        "Common causes of http401:",
+        "  - cookie is malformed (missing 'auth=' prefix, missing 'oc_locale=...', etc.)",
+        "  - cookie is expired or has been signed-out",
+        "Try: copy the cookie fresh from DevTools after re-login.",
+      ].join("\n")
+    case "noconfig":
+      return [
+        "No usable config. Set OPENCODE_GO_COOKIE + OPENCODE_GO_WORKSPACE_ID",
+        "(env vars or ~/.pi/agent/pi-ocgo-usage.json), or use /oc-go-config set.",
+      ].join("\n")
+    case "timeout":
+      return [
+        "Request timed out. The opencode.ai backend may be slow; the next turn will retry.",
+        "If persistent, check your network or increase OPENCODE_GO_TIMEOUT_MS.",
+      ].join("\n")
+    case "fetch":
+      return "Network error reaching opencode.ai. Check connectivity."
+    default:
+      return ""
+  }
 }

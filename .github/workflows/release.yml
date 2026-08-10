@@ -1,7 +1,26 @@
-name: Minimal Test
-on: push
+name: Release
+
+on:
+  push:
+    branches:
+      - master
+
+permissions:
+  id-token: write
+  contents: write
+
 jobs:
-  hello:
+  release:
+    name: semantic-release
     runs-on: ubuntu-latest
     steps:
-      - run: echo "hello"
+      - name: Checkout
+        uses: actions/checkout@v7
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Build
+        run: bun run build

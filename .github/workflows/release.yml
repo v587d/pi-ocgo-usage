@@ -22,6 +22,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          # semantic-release needs full history to analyze commits/tags
+          fetch-depth: 0
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -41,7 +44,15 @@ jobs:
           registry-url: "https://registry.npmjs.org"
 
       - name: Semantic Release
-        uses: cycjimmy/semantic-release-action@v6
+        # Run the repo's own semantic-release toolchain (semantic-release 25 +
+        # @semantic-release/npm 13, verified against npm granular access
+        # tokens). The previous cycjimmy/semantic-release-action@v6 bundles its
+        # own older @semantic-release/npm which rejects granular tokens with
+        # "Invalid npm token" (see semantic-release/npm#215).
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          npx --no-install semantic-release

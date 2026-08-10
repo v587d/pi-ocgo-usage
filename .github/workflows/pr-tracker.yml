@@ -1,0 +1,91 @@
+name: Track opencode PR #16513
+
+on:
+  schedule:
+    # every 6 hours (UTC), offset to avoid top-of-hour contention
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  track:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Query PR #16513
+        id: query
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PR="repos/anomalyco/opencode/pulls/16513"
+          PR_URL="https://github.com/anomalyco/opencode/pull/16513"
+          TITLE=$(gh api "$PR" --jq '.title' || echo "n/a")
+          STATE=$(gh api "$PR" --jq '.state' || echo "unknown")
+          MERGED=$(gh api "$PR" --jq '.merged' || echo "false")
+          MERGE_SHA=$(gh api "$PR" --jq '.merge_commit_sha // "n/a"' || echo "n/a")
+          UPDATED=$(gh api "$PR" --jq '.updated_at' || echo "n/a")
+          echo "pr_url=$PR_URL" >> "$GITHUB_ENV"
+          echo "title=$TITLE" >> "$GITHUB_ENV"
+          echo "state=$STATE" >> "$GITHUB_ENV"
+          echo "merged=$MERGED" >> "$GITHUB_ENV"
+          echo "merge_sha=$MERGE_SHA" >> "$GITHUB_ENV"
+          echo "updated=$UPDATED" >> "$GITHUB_ENV"
+
+      - name: Detect new merge (state transition)
+        id: detect
+        run: |
+          PREV=$(sed -n 's/^State: //p' docs/pr-16513-status.md 2>/dev/null || echo "unknown")
+          echo "prev=$PREV" >> "$GITHUB_ENV"
+          if [ "$MERGED" = "true" ] && [ "$PREV" != "merged" ]; then
+            echo "is_new_merge=true" >> "$GITHUB_ENV"
+          else
+            echo "is_new_merge=false" >> "$GITHUB_ENV"
+          fi
+
+      - name: Write status snapshot
+        run: |
+          cat > docs/pr-16513-status.md <<EOF
+          # Tracked: anomalyco/opencode#16513
+
+          > Auto-updated by .github/workflows/pr-tracker.yml (every 6h). Do not edit manually.
+
+          - Title: $TITLE
+          - PR: $PR_URL
+          - State: $STATE
+          - Merged: $MERGED
+          - Merge commit: $MERGE_SHA
+          - PR updated: $UPDATED
+          - Last checked: $(date -u +%Y-%m-%dT%H:%M:%SZ)
+          EOF
+
+      - name: Commit snapshot
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/pr-16513-status.md
+          if git diff --cached --quiet; then
+            echo "no state change; skipping commit"
+          else
+            git commit -m "chore(pr-tracker): refresh opencode#16513 status [skip ci]"
+            git push
+          fi
+
+      - name: Open issue on merge
+        if: env.is_new_merge == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh issue create \
+            --title "🚀 opencode#16513 merged — enable the official API path" \
+            --body "The tracked PR [$TITLE]($PR_URL) has **merged** (merge commit: \`$MERGE_SHA\`).
+
+          Next steps:
+          1. Verify the live \`GET /zen/go/v1/usage\` response shape against docs/SPEC.md.
+          2. Flip \`buildPathList()\` (src/api.ts) to apikey-first with cookie/SSR as fallback.
+          3. Run \`bun run test\` + \`bun run check\`, rebuild dist, release a new version.
+          4. Update docs/pr-16513-status.md and close this issue."

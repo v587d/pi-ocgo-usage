@@ -3,6 +3,8 @@
 [![npm](https://img.shields.io/npm/v/pi-ocgo-usage)](https://www.npmjs.com/package/pi-ocgo-usage)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
+![Footer demo](assets/screenshot.png)
+
 A [Pi coding agent](https://pi.dev/) extension that displays [OpenCode Go](https://opencode.ai/docs/go/) subscription usage in the footer when using an `opencode-go/*` model.
 
 > **⚠️ This extension requires an OpenCode Go session cookie to function.**
@@ -14,9 +16,9 @@ A [Pi coding agent](https://pi.dev/) extension that displays [OpenCode Go](https
 - **Auto Footer Display** — Automatically shows usage in the footer when using any `opencode-go/*` model
 - **Three Windows** — Rolling (5h), weekly, and monthly usage percentages with reset countdowns
 - **Color Thresholds** — `muted` / `warning` (≥80%) / `error` (≥90% or rate-limited)
-- **Smart Caching** — 5-minute cache TTL (configurable 60–3600s) to respect opencode.ai backend load
+- **Refresh Cooldown** — Fetches at most once per 5 minutes per session (constant `cooldownMs`; the `cacheTTL` config field is reserved for the future API path)
 - **Graceful Degradation** — On HTTP error, footer shows `<err:code>`; on missing config, footer is silently empty
-- **Future-proof** — Built-in support for the upcoming official API ([PR #16513](https://github.com/anomalyco/opencode/pull/16513)) as a fallback
+- **Future-proof** — Pre-wired for the official API ([PR #16513](https://github.com/anomalyco/opencode/pull/16513)): the moment it ships, the extension switches to it automatically and the current cookie/SSR approach becomes the fallback
 
 ## Install
 
@@ -85,7 +87,19 @@ pi install ./
 | `OPENCODE_GO_MODE` | `auto` | `auto` / `cookie` / `apikey` |
 | `OPENCODE_GO_TIMEOUT_MS` | `10000` | HTTP timeout |
 
-> ⚠️ **Cookie expiration:** the `auth` cookie is signed by Cloudflare Iron Session and is valid for **1 year** from issue. When it expires, the extension shows `<err:http500>` (server returns 500 when no actor is found). Re-login to opencode.ai and update the cookie.
+> ⚠️ **Cookie expiration:** the `auth` cookie is signed by Cloudflare Iron Session and is valid for **1 year** from issue. When it expires (or is revoked), the `/workspace/<wrk>/go` page 302-redirects to the login page, which parses as an empty page — the footer then shows no windows rather than an error. Re-login to opencode.ai and update the cookie via `/oc-go-config set`.
+
+## Slash commands
+
+The extension registers the `/oc-go-config` command — run it inside a Pi chat to configure or test the extension without touching your shell:
+
+| Command | What it does |
+|---|---|
+| `/oc-go-config` (no args) | Show current config summary + usage help |
+| `/oc-go-config status` | Same as no args (explicit) |
+| `/oc-go-config set` | Interactive wizard: paste `workspace_id` + cookie → **persists to `~/.pi/agent/pi-ocgo-usage.json` (mode 0600)** after confirmation. Pasting works with any of: full header (`auth=…; oc_locale=zh`), just the auth value (`Fe26.2*…`), or value + locale — it is normalized automatically |
+| `/oc-go-config test` | One-shot live fetch with current config; renders exactly what the footer would show (use this to verify cookie/workspace) |
+| `/oc-go-config clear` | Delete the persisted config file (cookie + workspace ID) |
 
 ## Usage
 
@@ -104,29 +118,47 @@ Footer is **cleared** when switching to a non-OpenCode-Go model or on session sh
 
 ## How It Works
 
-The extension reverse-engineers the opencode.ai console's `_server` SolidStart RPC endpoint, which is what the dashboard itself uses to display Go usage. The endpoint:
+The extension reverse-engineered the opencode.ai console and found that the `/_server` RPC endpoint (which the dashboard uses for its own API-key calls) **always rejects cookie-authenticated requests with HTTP 500** — so it is not usable. Instead, the extension scrapes the SSR-rendered usage page:
 
 ```
-GET /_server?id=lite.subscription.get&workspaceID=<wrk>
+GET /workspace/<wrk>/go
 Cookie: auth=Fe26.2*...; oc_locale=zh
 ```
 
-returns:
+The page renders each usage window as a `data-slot="usage-item"` block; the extension parses the percent and the human-readable reset phrase (e.g. `Resets in 2 hours 29 minutes`) and normalizes them into the internal `NormalizedUsage` shape:
 
-```json
+```jsonc
 {
-  "mine": true,
-  "useBalance": false,
-  "region": "us",
-  "rollingUsage":  { "status": "ok", "resetInSec": 12345,    "usagePercent": 23 },
-  "weeklyUsage":   { "status": "ok", "resetInSec": 678901,   "usagePercent": 30 },
-  "monthlyUsage":  { "status": "ok", "resetInSec": 1111111,  "usagePercent": 12 }
+  "useBalance": true,
+  "rolling": { "percent": 80, "resetInSec": 3840,  "status": "ok" },
+  "weekly":  { "percent": 32, "resetInSec": 586800,"status": "ok" },
+  "monthly": { "percent": 66, "resetInSec": 939600,"status": "ok" }
 }
 ```
 
-This schema is the **same** as the official `GET /zen/go/v1/usage` endpoint proposed in [anomalyco/opencode#16513](https://github.com/anomalyco/opencode/pull/16513). When that PR ships, the extension will automatically fall back to it (Bearer auth via `ctx.modelRegistry.getApiKeyForProvider("opencode-go")`), so no client-side changes are required.
+### Official API auto-switch ([anomalyco/opencode#16513](https://github.com/anomalyco/opencode/pull/16513))
+
+The official `GET /zen/go/v1/usage` endpoint (Bearer auth via `ctx.modelRegistry.getApiKeyForProvider("opencode-go")`) is **pre-wired and auto-enabled when the PR ships** — `buildPathList()` already contains the switch logic (apikey path first, cookie/SSR as fallback). Until the PR merges, the apikey endpoint always 404s, so the cookie path is used. No client-side changes are required on your end; watch the PR (or the [tracking workflow](#tracking-the-official-api-pr)) for the switch.
+
+### Tracking the official API PR
+
+Two ways to stay informed — use both:
+
+1. **GitHub notification (instant, manual):** sign in to GitHub, open [anomalyco/opencode#16513](https://github.com/anomalyco/opencode/pull/16513) and click **Subscribe** (🔔, right sidebar). You get an email on every event, including the merge.
+2. **Repo auto-tracker (zero effort):** this repository ships a scheduled workflow (`.github/workflows/pr-tracker.yml`) that polls the PR every 6 hours and:
+   - commits a status snapshot to `docs/pr-16513-status.md` (state, merge commit, last checked),
+   - **opens an issue in this repo the moment the PR merges** — if you watch this repo (or get notifications for your own repos), that's your automated ping to update/release the extension with the apikey path enabled.
 
 See [docs/RESEARCH.md](./docs/RESEARCH.md) for full reverse-engineering details and [docs/SPEC.md](./docs/SPEC.md) for the implementation contract.
+
+## Troubleshooting
+
+| Symptom | Meaning / fix |
+|---|---|
+| Footer empty, no windows | Cookie invalid/expired → 302 to login page (parses as empty). Re-login & `/oc-go-config set` |
+| `<err:http500>` | Server-side error on `/workspace/<wrk>/go` (transient backend issue). Retry later; run `/oc-go-config test` for the raw message |
+| `<err:noconfig>` | Missing cookie + workspace ID. Run `/oc-go-config set` or set the env vars above |
+| `<err:timeout>` | Backend slow; raise `OPENCODE_GO_TIMEOUT_MS` |
 
 ## Security
 

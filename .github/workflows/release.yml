@@ -43,6 +43,15 @@ jobs:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
 
+      - name: Diagnostic - npm token fingerprint
+        # TEMPORARY: compare CI-side NPM_TOKEN against the locally verified
+        # token (len=40, sha256=b0ad0c20523a6935). Remove after release works.
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          echo "NPM_TOKEN length: ${#NPM_TOKEN}"
+          echo "NPM_TOKEN sha256: $(printf '%s' "$NPM_TOKEN" | sha256sum | cut -c1-16)"
+
       - name: Semantic Release
         # Run the repo's own semantic-release toolchain (semantic-release 25 +
         # @semantic-release/npm 13, verified against npm granular access

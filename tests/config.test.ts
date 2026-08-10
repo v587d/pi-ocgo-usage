@@ -66,7 +66,8 @@ describe("loadConfig (env only)", () => {
     process.env.OPENCODE_GO_TIMEOUT_MS = "15000"
 
     const cfg = loadConfig()
-    expect(cfg.cookie).toBe("auth=env-cookie")
+    // normalizeCookie auto-appends oc_locale=en to a full header missing it
+    expect(cfg.cookie).toBe("auth=env-cookie; oc_locale=en")
     expect(cfg.workspaceID).toBe("wrk_ENV")
     expect(cfg.baseUrl).toBe("https://env.test")
     expect(cfg.cacheTTL).toBe(600)
@@ -118,14 +119,15 @@ describe("loadConfig (file)", () => {
         // File values apply when no env
         clearEnv()
         let cfg = loadConfig()
-        expect(cfg.cookie).toBe("auth=file-cookie")
+        // normalizeCookie auto-prefixes "auth=" and appends oc_locale=en
+        expect(cfg.cookie).toBe("auth=file-cookie; oc_locale=en")
         expect(cfg.workspaceID).toBe("wrk_FILE")
         expect(cfg.cacheTTL).toBe(120)
 
         // Env wins when set
         process.env.OPENCODE_GO_COOKIE = "auth=env-cookie"
         cfg = loadConfig()
-        expect(cfg.cookie).toBe("auth=env-cookie")
+        expect(cfg.cookie).toBe("auth=env-cookie; oc_locale=en")
         // workspaceID is still from file since not overridden
         expect(cfg.workspaceID).toBe("wrk_FILE")
       })

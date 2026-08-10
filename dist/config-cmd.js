@@ -14,6 +14,8 @@ import { chmodSync, existsSync, mkdirSync, unlinkSync, writeFileSync } from "nod
 import { dirname } from "node:path";
 import { fetchUsage, UsageError } from "./api";
 import { configFilePath, loadConfig } from "./config";
+// normalizeCookie is re-exported by index.ts for testability; we use loadConfig
+// here to apply normalization transparently.
 import { renderUsage } from "./render";
 const USAGE_HELP = [
     "`/oc-go-config` — configure OpenCode Go usage extension",
@@ -99,8 +101,10 @@ export async function runOcgoConfig(args, ctx) {
             return {};
         }
         try {
-            writeConfig(cookie, workspaceID);
-            ctx.ui.notify(`Saved: ${configFilePath()}`, "info");
+            // Re-load to apply normalization (auto-prefix "auth=" if missing)
+            const normalized = loadConfig().cookie ?? cookie;
+            writeConfig(normalized, workspaceID);
+            ctx.ui.notify(`Saved: ${configFilePath()}\n  cookie: ${fingerprint(normalized)} (${normalized.startsWith("auth=") ? "with auth= prefix" : "normalized"})`, "info");
         }
         catch (e) {
             ctx.ui.notify(`Failed to save: ${e instanceof Error ? e.message : String(e)}`, "error");

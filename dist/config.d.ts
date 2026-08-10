@@ -15,4 +15,17 @@ export declare function configFilePath(): string;
  * Returns a fully resolved OCGoConfig; never throws.
  */
 export declare function loadConfig(): OCGoConfig;
+/**
+ * Normalize a user-provided cookie string into a valid `Cookie:` header value.
+ *
+ * Accepts three forms:
+ *  1. Full header: "auth=Fe26.2*...; oc_locale=zh"   (passthrough)
+ *  2. Single value: "Fe26.2*..."                    (auto-prefix "auth=")
+ *  3. Two-segment:  "Fe26.2*...; oc_locale=zh"       (auto-prefix "auth=",
+ *                                                       keep oc_locale)
+ *
+ * Strips leading/trailing whitespace, collapses internal whitespace, and
+ * defaults `oc_locale=en` when only the auth value is present.
+ */
+export declare function normalizeCookie(input: string | undefined): string | undefined;
 //# sourceMappingURL=config.d.ts.map

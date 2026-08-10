@@ -32,8 +32,9 @@ export function configFilePath() {
  */
 export function loadConfig() {
     const fileConfig = readFileConfig();
-    // Cookie: prefer env, fall back to file
-    const cookie = pickString(process.env[ENV_COOKIE], asString(fileConfig?.cookie));
+    // Cookie: prefer env, fall back to file; normalize so users can paste
+    // either the full header or just the auth value
+    const cookie = normalizeCookie(pickString(process.env[ENV_COOKIE], asString(fileConfig?.cookie)));
     // Workspace ID: prefer env, fall back to file
     const workspaceID = pickString(process.env[ENV_WORKSPACE_ID], asString(fileConfig?.workspaceID));
     // baseUrl: prefer env, fall back to file, fall back to default
@@ -77,6 +78,44 @@ function pickString(envVal, fileVal) {
     if (fileVal && fileVal.length > 0)
         return fileVal;
     return undefined;
+}
+/**
+ * Normalize a user-provided cookie string into a valid `Cookie:` header value.
+ *
+ * Accepts three forms:
+ *  1. Full header: "auth=Fe26.2*...; oc_locale=zh"   (passthrough)
+ *  2. Single value: "Fe26.2*..."                    (auto-prefix "auth=")
+ *  3. Two-segment:  "Fe26.2*...; oc_locale=zh"       (auto-prefix "auth=",
+ *                                                       keep oc_locale)
+ *
+ * Strips leading/trailing whitespace, collapses internal whitespace, and
+ * defaults `oc_locale=en` when only the auth value is present.
+ */
+export function normalizeCookie(input) {
+    if (!input)
+        return undefined;
+    const trimmed = input.trim().replace(/\s+/g, " ");
+    if (!trimmed)
+        return undefined;
+    const hasAuthPrefix = /^auth=/.test(trimmed);
+    const segments = trimmed.split(/;\s*/).filter(Boolean);
+    const ocLocale = segments.find((s) => s.startsWith("oc_locale="));
+    if (hasAuthPrefix) {
+        // Already valid: just ensure oc_locale exists. Re-stitch from
+        // segments so any extra whitespace in the original gets normalized.
+        const authSeg = (segments.find((s) => s.startsWith("auth=")) ?? segments[0] ?? "").trim();
+        const ocSeg = ocLocale ?? "oc_locale=en";
+        return `${authSeg}; ${ocSeg}`;
+    }
+    // User pasted just the auth value (possibly with oc_locale appended).
+    // The first segment is the auth value; prepend "auth=".
+    const authValue = (segments[0] ?? "").trim();
+    const extras = segments
+        .slice(1)
+        .map((s) => s.trim())
+        .filter(Boolean);
+    const ocLocale2 = extras.find((s) => s.startsWith("oc_locale=")) ?? "oc_locale=en";
+    return `auth=${authValue}; ${ocLocale2}`;
 }
 function pickNumber(envVal, fileVal, fallback) {
     const fromEnv = envVal ? Number.parseInt(envVal, 10) : NaN;

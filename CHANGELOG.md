@@ -5,11 +5,6 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-# Changelog
-
-All notable changes to this project will be documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
-
 ## [Unreleased]
 
 ### Added
@@ -21,6 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Color thresholds: `muted` / `warning` (≥80%) / `error` (≥90% or rate-limited), customizable via `~/.pi/agent/pi-usage-lib.json` (shared with `pi-usage-lib`).
 - Graceful error display: `<err:code>` in footer on HTTP/network/parse failures; silent no-op when config is missing.
 - Tested against fixtures modeled on the actual `Subscription.analyzeRollingUsage / analyzeWeeklyUsage / analyzeMonthlyUsage` output (see [anomalyco/opencode `core/src/subscription.ts`](https://github.com/sst/opencode/blob/dev/packages/console/core/src/subscription.ts)).
+
+## [1.1.0] - 2026-08-10
+
+### Added
+
+- **render**: show last-fetch time instead of useBalance suffix
 
 ## [1.0.0] - 2026-08-10
 
@@ -38,3 +39,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - add GitHub install path to README
 - rewrite README for SSR path, slash commands, PR #16513 tracking
 - sync SPEC + RESEARCH with the SSR cookie path
+
+[1.1.0]: https://github.com/v587d/pi-ocgo-usage/compare/v1.0.0...v1.1.0

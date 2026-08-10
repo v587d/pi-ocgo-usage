@@ -42,27 +42,15 @@ export function renderUsage(data, theme) {
     return head + segments + tail;
 }
 /**
- * Format a fetch timestamp (epoch ms) as "update HH:MM (UTC+8)" in the local
- * timezone, using Temporal only (no Date API). The UTC offset label is the
- * system's current offset (e.g. "+08:00" -> "UTC+8").
+ * Format a fetch timestamp (epoch ms) as "HH:MM" in the local timezone,
+ * using Temporal only (no Date API).
  */
 function formatUpdatedAt(updatedAt) {
     const timeZone = Temporal.Now.timeZoneId();
     const zdt = Temporal.Instant.fromEpochMilliseconds(updatedAt).toZonedDateTimeISO(timeZone);
     const hh = String(zdt.hour).padStart(2, "0");
     const mm = String(zdt.minute).padStart(2, "0");
-    const offset = Temporal.Now.zonedDateTimeISO(timeZone).offset;
-    return `update ${hh}:${mm} (${utcOffsetLabel(offset ?? "UTC")})`;
-}
-/** "+08:00" -> "UTC+8", "-05:30" -> "UTC-5:30", fallback: raw offset. */
-function utcOffsetLabel(offset) {
-    const m = /^([+-])(\d{2})(?::(\d{2}))?$/.exec(offset);
-    if (!m)
-        return offset;
-    const sign = m[1];
-    const hours = m[2] !== undefined ? Number.parseInt(m[2], 10) : 0;
-    const minutes = m[3] ? Number.parseInt(m[3], 10) : 0;
-    return minutes === 0 ? `UTC${sign}${hours}` : `UTC${sign}${hours}:${minutes}`;
+    return `${hh}:${mm}`;
 }
 function renderWindow(w, theme) {
     const labelText = WINDOW_LABELS[w.kind];

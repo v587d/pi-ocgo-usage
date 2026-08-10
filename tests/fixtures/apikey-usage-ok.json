@@ -1,0 +1,22 @@
+{
+  "useBalance": false,
+  "rollingUsage": {
+    "usage": 2800000000,
+    "limit": 12000000000,
+    "window": 18000000,
+    "resetsAt": "2099-01-01T00:00:00.000Z"
+  },
+  "weeklyUsage": {
+    "usage": 9000000000,
+    "limit": 30000000000,
+    "window": 604800000,
+    "resetsAt": "2099-01-08T00:00:00.000Z"
+  },
+  "monthlyUsage": {
+    "usage": 7200000000,
+    "limit": 60000000000,
+    "window": 2592000000,
+    "resetsAt": "2099-02-01T00:00:00.000Z",
+    "timeSubscribed": "2026-05-15T00:00:00.000Z"
+  }
+}

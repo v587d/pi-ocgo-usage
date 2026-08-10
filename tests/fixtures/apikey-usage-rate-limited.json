@@ -1,0 +1,15 @@
+{
+  "useBalance": true,
+  "rollingUsage": {
+    "usage": 12000000000,
+    "limit": 12000000000,
+    "window": 18000000,
+    "resetsAt": "2099-01-01T00:00:00.000Z"
+  },
+  "weeklyUsage": {
+    "usage": 15000000000,
+    "limit": 30000000000,
+    "window": 604800000,
+    "resetsAt": "2099-01-08T00:00:00.000Z"
+  }
+}

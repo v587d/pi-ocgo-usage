@@ -1,0 +1,14 @@
+{
+  "mine": true,
+  "rollingUsage": {
+    "status": "ok",
+    "resetInSec": "not-a-number",
+    "usagePercent": 23.7
+  },
+  "weeklyUsage": null,
+  "monthlyUsage": {
+    "status": "unknown-status",
+    "resetInSec": 1000000,
+    "usagePercent": 200
+  }
+}

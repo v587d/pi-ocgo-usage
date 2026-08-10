@@ -1,0 +1,20 @@
+{
+  "mine": true,
+  "useBalance": true,
+  "region": "us",
+  "rollingUsage": {
+    "status": "rate-limited",
+    "resetInSec": 3600,
+    "usagePercent": 100
+  },
+  "weeklyUsage": {
+    "status": "ok",
+    "resetInSec": 500000,
+    "usagePercent": 75
+  },
+  "monthlyUsage": {
+    "status": "ok",
+    "resetInSec": 2000000,
+    "usagePercent": 45
+  }
+}

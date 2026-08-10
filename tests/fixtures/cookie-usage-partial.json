@@ -1,0 +1,10 @@
+{
+  "mine": true,
+  "useBalance": false,
+  "region": "us",
+  "rollingUsage": {
+    "status": "ok",
+    "resetInSec": 7200,
+    "usagePercent": 15
+  }
+}

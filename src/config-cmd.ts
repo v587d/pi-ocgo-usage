@@ -1,0 +1,183 @@
+/**
+ * Config command helpers for /oc-go-config
+ *
+ * Owns the user-facing /oc-go-config slash command. Subcommands:
+ *   (none)    show current status (cookie/workspace/mode/ttl)
+ *   set       prompt for cookie + workspace_id, persist with chmod 600
+ *   clear     confirm + remove config file
+ *   test      one-shot fetch via the active path; reports success/error
+ *
+ * The cookie is never echoed in any message — only its length or a
+ * fingerprint is shown.
+ */
+
+import { chmodSync, existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs"
+import { dirname } from "node:path"
+import { fetchUsage, UsageError } from "./api"
+import { configFilePath, loadConfig } from "./config"
+import { renderUsage } from "./render"
+
+const USAGE_HELP = [
+  "`/oc-go-config` — configure OpenCode Go usage extension",
+  "",
+  "Subcommands:",
+  "  (none)  Show current configuration (masked)",
+  "  set     Prompt for cookie + workspace_id, persist with chmod 600",
+  "  clear   Delete the config file (requires confirmation)",
+  "  test    One-shot fetch using the active config; reports success/error",
+  "",
+  "Env vars (override file):",
+  "  OPENCODE_GO_COOKIE         full Cookie header value (auth=...; oc_locale=...)",
+  "  OPENCODE_GO_WORKSPACE_ID   workspace id (wrk_...)",
+  "  OPENCODE_GO_BASE_URL       default https://opencode.ai",
+  "  OPENCODE_GO_CACHE_TTL      60-3600, default 300",
+  "  OPENCODE_GO_MODE           auto | cookie | apikey",
+  "  OPENCODE_GO_TIMEOUT_MS     default 10000",
+].join("\n")
+
+/**
+ * Minimal command-context shape. Matches the slice of
+ * `ExtensionCommandContext` that `runOcgoConfig` actually uses, so tests
+ * can supply a partial mock without casting to the full context.
+ */
+export interface OcgoCommandContext {
+  ui: {
+    input: (title: string, prefilled: string) => Promise<string | undefined>
+    confirm: (title: string, message: string) => Promise<boolean>
+    notify: (msg: string, level: "info" | "warning" | "error") => void
+    theme: unknown
+  }
+  modelRegistry: { getApiKeyForProvider: (id: string) => Promise<string | undefined> }
+}
+
+interface CommandResult {
+  cancel?: boolean
+  clearStatus?: boolean
+}
+
+function fingerprint(value: string | undefined): string {
+  if (!value) return "(unset)"
+  if (value.length <= 12) return `${value.length} chars`
+  return `${value.length} chars, starts "${value.slice(0, 6)}…"`
+}
+
+function summarize(): string {
+  const cfg = loadConfig()
+  const file = configFilePath()
+  const exists = existsSync(file)
+  return [
+    `config file: ${file} ${exists ? "" : "(not created)"}`,
+    `cookie:        ${fingerprint(cfg.cookie)}`,
+    `workspace_id:  ${cfg.workspaceID ?? "(unset)"}`,
+    `base_url:      ${cfg.baseUrl}`,
+    `cache_ttl:     ${cfg.cacheTTL}s`,
+    `mode:          ${cfg.mode}`,
+    `timeout_ms:    ${cfg.timeoutMs}`,
+  ].join("\n")
+}
+
+function writeConfig(cookie: string, workspaceID: string): void {
+  const path = configFilePath()
+  mkdirSync(dirname(path), { recursive: true })
+  writeFileSync(path, JSON.stringify({ cookie, workspaceID }, null, 2), {
+    encoding: "utf8",
+    mode: 0o600,
+  })
+  // Belt-and-suspenders: chmod even when umask interferes
+  chmodSync(path, 0o600)
+}
+
+function clearConfig(): boolean {
+  const path = configFilePath()
+  if (!existsSync(path)) return false
+  unlinkSync(path)
+  return true
+}
+
+/**
+ * Entry point registered with `pi.registerCommand("oc-go-config", ...)`.
+ * `args` is the subcommand (whitespace-trimmed); ctx is the command context.
+ */
+export async function runOcgoConfig(args: string, ctx: OcgoCommandContext): Promise<CommandResult> {
+  const sub = args.trim().split(/\s+/)[0]?.toLowerCase() ?? ""
+
+  // Help / status (default)
+  if (sub === "" || sub === "status" || sub === "help") {
+    ctx.ui.notify(summarize(), "info")
+    ctx.ui.notify(USAGE_HELP, "info")
+    return {}
+  }
+
+  if (sub === "set") {
+    const workspaceID = await ctx.ui.input(
+      "OpenCode Go workspace ID (wrk_…)",
+      loadConfig().workspaceID ?? "",
+    )
+    if (!workspaceID) {
+      ctx.ui.notify("Cancelled: workspace ID is required.", "warning")
+      return {}
+    }
+    const cookie = await ctx.ui.input(
+      "OpenCode Go session cookie (Cookie header value, e.g. auth=Fe26.2*…; oc_locale=zh)",
+      loadConfig().cookie ?? "",
+    )
+    if (!cookie) {
+      ctx.ui.notify("Cancelled: cookie is required.", "warning")
+      return {}
+    }
+    const confirmed = await ctx.ui.confirm(
+      "Persist cookie to disk?",
+      `The cookie is a full OpenCode user session (1-year TTL). It will be written to ${configFilePath()} with mode 0600. Continue?`,
+    )
+    if (!confirmed) {
+      ctx.ui.notify("Cancelled; not writing config.", "info")
+      return {}
+    }
+    try {
+      writeConfig(cookie, workspaceID)
+      ctx.ui.notify(`Saved: ${configFilePath()}`, "info")
+    } catch (e) {
+      ctx.ui.notify(`Failed to save: ${e instanceof Error ? e.message : String(e)}`, "error")
+    }
+    return { clearStatus: true }
+  }
+
+  if (sub === "clear") {
+    const path = configFilePath()
+    if (!existsSync(path)) {
+      ctx.ui.notify(`Nothing to clear (no file at ${path}).`, "info")
+      return {}
+    }
+    const ok = await ctx.ui.confirm(
+      "Delete config file?",
+      `This will remove ${path}. You will need to reconfigure.`,
+    )
+    if (!ok) return {}
+    const removed = clearConfig()
+    ctx.ui.notify(removed ? `Removed ${path}` : "File not found.", removed ? "info" : "warning")
+    return { clearStatus: true }
+  }
+
+  if (sub === "test") {
+    ctx.ui.notify("Running one-shot fetch with current config…", "info")
+    try {
+      const data = await fetchUsage(ctx.modelRegistry)
+      // Try to render so the user sees what the footer would show
+      const rendered = renderUsage(data, ctx.ui.theme as Parameters<typeof renderUsage>[1])
+      if (rendered) {
+        ctx.ui.notify(`OK: ${rendered}`, "info")
+      } else {
+        ctx.ui.notify("OK (no windows to display).", "info")
+      }
+    } catch (e) {
+      const code = e instanceof UsageError ? e.code : "fetch"
+      const msg = e instanceof Error ? e.message : String(e)
+      // Avoid showing the cookie or full error; just code + short hint
+      ctx.ui.notify(`Failed: <err:${code}> — ${msg.slice(0, 80)}`, "error")
+    }
+    return { clearStatus: true }
+  }
+
+  ctx.ui.notify(`Unknown subcommand: ${sub}\n\n${USAGE_HELP}`, "warning")
+  return {}
+}

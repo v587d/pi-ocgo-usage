@@ -1,0 +1,107 @@
+{
+  "runId": "2567d2d4",
+  "agent": "researcher",
+  "task": "我新开一个项目，名为“pi-go-usage”，pi agent extensions，在footer展示opencode go 账户使用情况。\n1. 调研目前类似项目，包括但不限于技术栈、issue、缺陷等。\n2. 调研opencode官方go账户usage接口或计划\n3. 确定项目边界，即做什么，不做什么，留给用户做什么等\n\n---\n**Output:**\nWrite your findings to exactly this path: /home/shawn/projects/pi-ext/pi-go-usage/.pi-subagents/artifacts/outputs/2567d2d4/research.md\nThis path is authoritative for this run.\nIgnore any other output filename or output path mentioned elsewhere, including output destinations in the base agent prompt, system prompt, or task instructions.",
+  "exitCode": 143,
+  "usage": {
+    "input": 4479,
+    "output": 335,
+    "cacheRead": 114,
+    "cacheWrite": 0,
+    "cost": 0.00175254,
+    "turns": 1
+  },
+  "model": "opencode-go/minimax-m3:medium",
+  "attemptedModels": [
+    "opencode-go/minimax-m3:medium"
+  ],
+  "modelAttempts": [
+    {
+      "model": "opencode-go/minimax-m3:medium",
+      "success": false,
+      "exitCode": 143,
+      "usage": {
+        "input": 4479,
+        "output": 335,
+        "cacheRead": 114,
+        "cacheWrite": 0,
+        "cost": 0.00175254,
+        "turns": 1
+      }
+    }
+  ],
+  "durationMs": 17671,
+  "toolCount": 2,
+  "launchContractDigest": "66ad47d99de283fe90868839d398c3c1997d656dfe9965b4e71bfd13ae254e17",
+  "launchResolvedExtensions": {
+    "version": 1,
+    "source": "launch-resolved",
+    "disableAmbientExtensions": false,
+    "runtime": [
+      "sha256:afd25543db7c5755"
+    ],
+    "configured": [],
+    "effective": [
+      "sha256:afd25543db7c5755"
+    ],
+    "omitted": {
+      "runtime": 0,
+      "configured": 0,
+      "effective": 0
+    }
+  },
+  "acceptance": {
+    "status": "rejected",
+    "evidenceStatus": "rejected",
+    "explicit": false,
+    "effectiveAcceptance": {
+      "level": "attested",
+      "explicit": false,
+      "inferredReason": [
+        "read-only/reviewer-style agent"
+      ],
+      "criteria": [
+        {
+          "id": "criterion-1",
+          "must": "Return concrete findings with file paths and severity when applicable",
+          "evidence": [
+            "review-findings",
+            "residual-risks"
+          ],
+          "severity": "required"
+        }
+      ],
+      "evidence": [
+        "review-findings",
+        "residual-risks"
+      ],
+      "verify": [],
+      "stopRules": []
+    },
+    "inferredReason": [
+      "read-only/reviewer-style agent"
+    ],
+    "criteria": [
+      {
+        "id": "criterion-1",
+        "must": "Return concrete findings with file paths and severity when applicable",
+        "evidence": [
+          "review-findings",
+          "residual-risks"
+        ],
+        "severity": "required"
+      }
+    ],
+    "runtimeChecks": [
+      {
+        "id": "attestation",
+        "status": "failed",
+        "message": "Structured acceptance report not found."
+      }
+    ],
+    "verifyRuns": [],
+    "childReportParseError": "Structured acceptance report not found."
+  },
+  "transcriptPath": "/home/shawn/projects/pi-ext/pi-go-usage/.pi-subagents/artifacts/2567d2d4_researcher_0_transcript.jsonl",
+  "timestamp": 1786321003351
+}

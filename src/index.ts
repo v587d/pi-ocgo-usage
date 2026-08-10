@@ -2,7 +2,8 @@
  * pi-ocgo-usage — entry point
  *
  * Wires up the cookie + (future) apikey usage fetchers into a pi extension
- * via `createUsageExtension` from `@alexanderfortin/pi-usage-lib`.
+ * via `createUsageExtension` from `@alexanderfortin/pi-usage-lib`, and
+ * registers the `/oc-go-config` slash command for user-driven setup.
  *
  * Lifecycle:
  *  - `session_start`    : if model is opencode-go, show footer (may show <err:code>)
@@ -11,11 +12,14 @@
  *  - `session_shutdown` : clear footer
  *
  * Provider matching lives in `./provider.ts`; config in `./config.ts`;
- * HTTP/parsing in `./api.ts`; rendering in `./render.ts`.
+ * HTTP/parsing in `./api.ts`; rendering in `./render.ts`;
+ * slash command in `./config-cmd.ts`.
  */
 
 import { createUsageExtension, type Theme } from "@alexanderfortin/pi-usage-lib"
+import type { ExtensionAPI } from "@earendil-works/pi-coding-agent"
 import { fetchUsage } from "./api"
+import { runOcgoConfig } from "./config-cmd"
 import { renderError, renderUsage } from "./render"
 import type { NormalizedUsage } from "./types"
 
@@ -35,6 +39,7 @@ export {
   UsageError,
 } from "./api"
 export { configFilePath, loadConfig } from "./config"
+export { runOcgoConfig } from "./config-cmd"
 export { isOpencodeGoProvider, PROVIDER_PREFIX } from "./provider"
 export { formatDuration, LABEL, renderError, renderUsage } from "./render"
 export type {
@@ -51,7 +56,7 @@ export type { Theme }
 // Extension factory
 // ============================================================================
 
-const extension = createUsageExtension<UsageData>({
+const baseExtension = createUsageExtension<UsageData>({
   providerPrefix: "opencode-go",
   statusKey: "opencode-go-usage",
   label: "OC.go",
@@ -62,5 +67,19 @@ const extension = createUsageExtension<UsageData>({
   renderStatus: (data, theme) => renderUsage(data, theme) ?? "",
   renderError: (error, theme) => renderError(error, theme),
 })
+
+/**
+ * Final extension: wraps the base usage extension and additionally registers
+ * the `/oc-go-config` slash command for user-driven configuration.
+ */
+const extension = (pi: ExtensionAPI): void => {
+  baseExtension(pi)
+  pi.registerCommand("oc-go-config", {
+    description: "Configure OpenCode Go usage extension (cookie + workspace_id)",
+    handler: async (args, ctx) => {
+      await runOcgoConfig(args, ctx)
+    },
+  })
+}
 
 export default extension

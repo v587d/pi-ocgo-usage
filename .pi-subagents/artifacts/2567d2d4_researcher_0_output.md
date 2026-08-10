@@ -1,0 +1,1 @@
+I'll research this project for OpenCode Go usage tracking in pi agent extensions. Let me start with parallel searches across the three research angles.

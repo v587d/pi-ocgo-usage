@@ -41,7 +41,12 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: "24"
-          registry-url: "https://registry.npmjs.org"
+          # Deliberately NO registry-url: it writes
+          # `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}` (empty, since
+          # NODE_AUTH_TOKEN is never set) to $RUNNER_TEMP/.npmrc. The npm
+          # plugin's registry-auth-token then sees a truthy "token", skips
+          # writing the real NPM_TOKEN, and `npm whoami` fails with 401
+          # (EINVALIDNPMTOKEN). Auth comes from NPM_TOKEN env alone.
 
       - name: Diagnostic - npm token fingerprint
         # TEMPORARY: compare CI-side NPM_TOKEN against the locally verified
@@ -64,4 +69,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Defensive: drop any userconfig pointer (setup-node leftover) so the
+          # npm plugin writes NPM_TOKEN itself.
+          unset NPM_CONFIG_USERCONFIG
           npx --no-install semantic-release

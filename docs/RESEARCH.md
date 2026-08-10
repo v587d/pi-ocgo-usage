@@ -203,7 +203,7 @@ opencode.ai 的控制台（dashboard、workspace、订阅管理）是一个完�
 - [x] 找到 PR 草案与源码的对应关系
 
 **待验证**：
-- [ ] 用户用真实 cookie 调 `_server?id=lite.subscription.get` 看响应（用户可验证，我不应再接触已泄露的 cookie）
+- [x] 用户用真实 cookie 调 `_server?id=lite.subscription.get` → **仍然 500**（实证：与 cookie 新鲜度/workspace 无关，`withActor()` 中间件不接受该会话 cookie）—— 端点对 cookie 鉴权**不可用**，因此 v0.1 主路径改用 `/workspace/<wrk>/go` SSR 抓取
 - [ ] PR #16513 合并后，新端点 `/zen/go/v1/usage` 实际响应是否真与 PR 草案一致
 
 ### 2.2 端点契约（来自 PR #16513 代码 diff，**可能与最终版不同**）

@@ -22,7 +22,7 @@
 
 | 路径 | 鉴权 | 端点 | 状态 | 何时启用 |
 |---|---|---|---|---|
-| **A. 主路径 (B2 cookie)** | Cookie `auth=<Iron-session>` | `GET /_server?id=lite.subscription.get&workspaceID=<wrk>` | ✅ 立即可用 | 默认 |
+| **A. 主路径 (B2 cookie)** | Cookie `auth=<Iron-session>` | `GET /workspace/<wrk>/go`（SSR HTML 抓取） | ✅ 立即可用 | 默认 |
 | **B. 未来 fallback (PR #16513)** | Bearer `<opencode-go-api-key>` | `GET /zen/go/v1/usage` | ⏳ 等 PR 合并 | PR 合并后自动启用 |
 
 **路径选择逻辑**（`fetchUsage` 内）：
@@ -110,24 +110,26 @@ interface NormalizedUsage {
 }
 ```
 
-### 5.2 路径 A 响应（cookie / `_server`）
+### 5.2 路径 A 响应（cookie / `/workspace/<wrk>/go` SSR HTML）
 
-```jsonc
-{
-  "mine": true,
-  "useBalance": false,
-  "region": "us",
-  "rollingUsage": { "status": "ok", "resetInSec": 12345, "usagePercent": 23 },
-  "weeklyUsage":  { "status": "ok", "resetInSec": 678901, "usagePercent": 30 },
-  "monthlyUsage": { "status": "ok", "resetInSec": 1111111, "usagePercent": 12 }
-}
+路径 A 不返回 JSON——它是 SolidStart 渲染的 HTML 页面，每个用量窗口渲染成一个
+`<div data-slot="usage-item">…</div>` 块（块内可能有嵌套 div，解析时按下一个
+usage-item 起点切块）：
+
+```html
+<div data-slot="usage-item">
+  <span data-slot="usage-label">Rolling Usage</span>
+  <span data-slot="usage-value"><!--$-->23<!--/-->%</span>
+  <span data-slot="reset-time"><!--$-->Resets in<!--/-->2 hours 29 minutes<!--/--></span>
+</div>
 ```
 
-Adapter 规则（`api.ts` `fromCookieResponse`）：
-- `useBalance` ← `data.useBalance`
-- `rolling` ← `{ kind: "rolling", percent: data.rollingUsage.usagePercent, resetInSec: data.rollingUsage.resetInSec, status: data.rollingUsage.status }`（如存在）
-- `weekly` / `monthly` 同理
-- `data.mine` / `data.region` 忽略（不在 footer 用）
+Adapter 规则（`api.ts` `fromSSRHTML` + `parseDurationToSec`）：
+- `label` ← `data-slot="usage-label"` 的文本（`Rolling Usage` / `Weekly Usage` / `Monthly Usage`）
+- `percent` ← `data-slot="usage-value"` 中的整数百分比
+- `resetsIn` ← `data-slot="reset-time"` 中的英文时长短语（如 `2 hours 29 minutes`），由 `parseDurationToSec` 粗估为秒
+- `useBalance` ← 页面文本是否包含 `useBalance`
+- 页面无 usage-item 块（如未登录被 302 到登录页）→ 空结果，不报错
 
 ### 5.3 路径 B 响应（PR #16513 草案 / `/zen/go/v1/usage`）
 

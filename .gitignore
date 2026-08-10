@@ -45,3 +45,6 @@ coverage/
 
 # Local secrets (do NOT commit)
 ocgo-usage.local.json
+
+# Harness internal state (pi subagent artifacts; do not commit)
+.pi-subagents/

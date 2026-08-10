@@ -11,6 +11,17 @@ A [Pi coding agent](https://pi.dev/) extension that displays [OpenCode Go](https
 > The cookie is a **full user session** (not an API key) and grants access to your entire OpenCode account.
 > Treat it with the same care as your password. See [Configuration](#configuration) below for how to obtain and store it.
 
+## Why
+
+**OpenCode Go is a prepaid subscription** — rolling (5h), weekly, and monthly windows, each with its own quota. When a window is exhausted you get rate-limited mid-work, which is exactly the worst moment to discover it. Yet there is **no official usage API yet**: the only place to see your numbers is the opencode.ai dashboard, and you have to open a browser to check.
+
+This extension puts the numbers where you already are — the Pi footer:
+
+- **Always visible** while you work with an `opencode-go/*` model, no browser tab needed
+- **Warns before you hit the wall**: color shifts to `warning` at ≥80% and `error` at ≥90% or when rate-limited
+- **Shows data freshness**: `update 14:32 (UTC+8)` tells you when the numbers were last fetched, so a stale footer never misleads you
+- **Pre-wired for the official API** ([PR #16513](https://github.com/anomalyco/opencode/pull/16513)): the moment opencode ships it, this extension switches to it automatically and the current cookie/SSR approach becomes the fallback
+
 ## Features
 
 - **Auto Footer Display** — Automatically shows usage in the footer when using any `opencode-go/*` model

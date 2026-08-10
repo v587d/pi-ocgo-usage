@@ -50,6 +50,7 @@
   },
   "files": [
     "dist",
+    "assets",
     "package.json",
     "README.md",
     "CHANGELOG.md",
@@ -68,7 +69,8 @@
   "pi": {
     "extensions": [
       "./dist/index.js"
-    ]
+    ],
+    "image": "https://raw.githubusercontent.com/v587d/pi-ocgo-usage/master/assets/screenshot.png"
   },
   "repository": {
     "type": "git",

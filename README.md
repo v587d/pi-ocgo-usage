@@ -19,7 +19,7 @@ This extension puts the numbers where you already are — the Pi footer:
 
 - **Always visible** while you work with an `opencode-go/*` model, no browser tab needed
 - **Warns before you hit the wall**: color shifts to `warning` at ≥80% and `error` at ≥90% or when rate-limited
-- **Shows data freshness**: `update 14:32 (UTC+8)` tells you when the numbers were last fetched, so a stale footer never misleads you
+- **Shows data freshness**: `14:32` (last successful fetch, local time) tells you how fresh the numbers are, so a stale footer never misleads you
 - **Pre-wired for the official API** ([PR #16513](https://github.com/anomalyco/opencode/pull/16513)): the moment opencode ships it, this extension switches to it automatically and the current cookie/SSR approach becomes the fallback
 
 ## Features
@@ -122,7 +122,7 @@ OC.go: 5h 23% (3h 25m) · wk 30% (4d 6h) · mo 12% (12d 4h)
 
 - Each window: `<label> <percent>% (<time remaining>)`
 - Color: muted → warning (≥80%) → error (≥90% or rate-limited)
-- On successful fetch: appended as `· update 14:32 (UTC+8)` — local time of the last successful refresh, so you can see how stale the data is
+- On successful fetch: appended as `· 14:32` — local time of the last successful refresh, so you can see how stale the data is
 - If any window is missing (e.g., new account): that segment is omitted
 
 Footer is **cleared** when switching to a non-OpenCode-Go model or on session shutdown.
@@ -148,7 +148,7 @@ The page renders each usage window as a `data-slot="usage-item"` block; the exte
 }
 ```
 
-`updatedAt` (epoch ms) is stamped by `fetchUsage` on every successful fetch and rendered as the footer's `· update HH:MM (UTC+8)` freshness indicator (local timezone). `useBalance` (whether over-limit usage falls back to your Zen balance) is still parsed but no longer rendered.
+`updatedAt` (epoch ms) is stamped by `fetchUsage` on every successful fetch and rendered as the footer's `· HH:MM` freshness indicator (local timezone). `useBalance` (whether over-limit usage falls back to your Zen balance) is still parsed but no longer rendered.
 
 ### Official API auto-switch ([anomalyco/opencode#16513](https://github.com/anomalyco/opencode/pull/16513))
 

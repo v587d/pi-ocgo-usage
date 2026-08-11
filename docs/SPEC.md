@@ -188,13 +188,17 @@ OC.go: 5h 23% (3h 25m) · wk 30% (4d 6h) · mo 12% (12d 4h)
 
 ## 7. 缓存与刷新
 
-**TTL**：默认 300 秒（5 分钟），可配置 60–3600。
+**TTL**：由 `cacheTTL` 配置决定（默认 300 秒，可配置 60–3600，见 §3），由自研 `UsageCache`（`src/usage-cache.ts`）实现。v0.3 起配置真正生效（此前被 `pi-usage-lib` 写死的 5 分钟冷却覆盖，属于死配置 bug）。
+
+**非阻塞原则（v0.3+）**：所有刷新均为 fire-and-forget —— 事件处理器同步返回，取数在后台进行，完成后才更新 footer。`session_start` / `model_select` / `turn_end` 任何一个事件都不会阻塞消息管线；即使取数失败/超时，也只在后台被 `timeoutMs`（默认 10s）中止，消息不受影响。不再使用 `pi-usage-lib` 的 `createUsageExtension` 自动接线（其处理器内联 `await` 网络请求，最坏每轮阻塞 `timeoutMs`）。
 
 **刷新触发**：
-- `session_start` —— 启动时（如果当前 provider 匹配）
-- `model_select` —— 切换到 opencode-go provider 时；切走时清空 footer
-- `turn_end` —— 每个 turn 结束（如果当前 provider 匹配）
-- `session_shutdown` —— 清空 footer
+- `session_start` —— 启动时（如果当前 provider 匹配；后台取数）
+- `model_select` —— 切换到 opencode-go provider 时（后台取数）；切走时同步清空 footer 并作废在途结果
+- `turn_end` —— 每个 turn 结束（如果当前 provider 匹配；缓存新鲜则仅重渲染 footer，不发请求）
+- `session_shutdown` —— 清空 footer 并作废在途结果
+
+**失败冷却**：取数失败后进入 60 秒冷却，期间跳过重试（footer 保留错误标记），避免配置损坏时每轮都打服务器。
 
 **主动刷新命令**（v0.2+，可选）：
 - `/ocgo-usage refresh` —— 绕过 cache 强制刷新
@@ -223,17 +227,19 @@ pi-ocgo-usage/
 │   ├── RESEARCH.md           ← 调研报告（已完成）
 │   └── SPEC.md               ← 本文件
 ├── src/
-│   ├── index.ts              ← 入口（注册事件 + 调用 createUsageExtension）
+│   ├── index.ts              ← 入口（注册事件 + 组装扩展，全部 fire-and-forget）
 │   ├── config.ts             ← 配置加载（env + file）
 │   ├── api.ts                ← fetch + 响应解析 + adapter
 │   ├── render.ts             ← 渲染 + 颜色 + 时间格式
 │   ├── provider.ts           ← provider 探测
-│   └── types.ts              ← 类型定义
+│   ├── types.ts              ← 类型定义
+│   └── usage-cache.ts        ← 自研非阻塞缓存（TTL + 失败冷却 + 在途去重）
 ├── tests/
 │   ├── config.test.ts
 │   ├── api.test.ts
 │   ├── render.test.ts
 │   ├── provider.test.ts
+│   ├── usage-cache.test.ts
 │   └── fixtures/
 │       ├── cookie-usage-ok.json
 │       ├── apikey-usage-ok.json
@@ -310,7 +316,7 @@ async function fetchUsage(registry: ModelRegistry): Promise<NormalizedUsage> {
 ### 10.3 库依赖
 
 **直接依赖**：
-- `@alexanderfortin/pi-usage-lib`（v0.2.x）—— 复用 `createUsageExtension` 工厂 + 缓存 + 事件 + 颜色阈值
+- `@alexanderfortin/pi-usage-lib`（v0.2.x）—— 仅复用颜色阈值 / `Theme` 类型；v0.3 起事件接线与缓存自研（`usage-cache.ts`），避免其内联 `await` 阻塞消息管线
 - `temporal-polyfill`（间接通过 pi-usage-lib）
 
 **不依赖**（自写以保持简单）：
@@ -349,7 +355,7 @@ async function fetchUsage(registry: ModelRegistry): Promise<NormalizedUsage> {
 ## 13. 参考实现
 
 - 项目结构 & 工具链：[pi-zai-usage](https://github.com/shaftoe/pi-zai-usage)
-- 共享库：[pi-usage-lib](https://github.com/shaftoe/pi-usage-lib)（`createUsageExtension`）
+- 共享库：[pi-usage-lib](https://github.com/shaftoe/pi-usage-lib)（`Theme` / 颜色阈值；v0.3 起事件与缓存自研，解决其内联 `await` 阻塞消息的问题）
 - Provider 范式：[examples/extensions/model-status.ts](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/examples/extensions/model-status.ts)
 - 状态栏范式：[examples/extensions/status-line.ts](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/examples/extensions/status-line.ts)
 - 渲染参考（Z.ai 配色）：[pi-zai-usage/src/index.ts](https://github.com/shaftoe/pi-zai-usage/blob/main/src/index.ts)

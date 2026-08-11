@@ -20,16 +20,17 @@ This extension puts the numbers where you already are — the Pi footer:
 - **Always visible** while you work with an `opencode-go/*` model, no browser tab needed
 - **Warns before you hit the wall**: color shifts to `warning` at ≥80% and `error` at ≥90% or when rate-limited
 - **Shows data freshness**: `14:32` (last successful fetch, local time) tells you how fresh the numbers are, so a stale footer never misleads you
-- **Pre-wired for the official API** ([PR #16513](https://github.com/anomalyco/opencode/pull/16513)): the moment opencode ships it, this extension switches to it automatically and the current cookie/SSR approach becomes the fallback
+- **Pre-wired for the official API** ([PR #16513](https://github.com/anomalyco/opencode/pull/16513)): the apikey path is implemented and usable today via `OPENCODE_GO_MODE=apikey`; once opencode ships the endpoint, `auto` mode flips to it with the cookie/SSR path as fallback (tracked by the [PR workflow](#tracking-the-official-api-pr))
 
 ## Features
 
 - **Auto Footer Display** — Automatically shows usage in the footer when using any `opencode-go/*` model
 - **Three Windows** — Rolling (5h), weekly, and monthly usage percentages with reset countdowns
 - **Color Thresholds** — `muted` / `warning` (≥80%) / `error` (≥90% or rate-limited)
-- **Refresh Cooldown** — Fetches at most once per 5 minutes per session (constant `cooldownMs`; the `cacheTTL` config field is reserved for the future API path)
-- **Graceful Degradation** — On HTTP error, footer shows `<err:code>`; on missing config, footer is silently empty
-- **Future-proof** — Pre-wired for the official API ([PR #16513](https://github.com/anomalyco/opencode/pull/16513)): the moment it ships, the extension switches to it automatically and the current cookie/SSR approach becomes the fallback
+- **Non-Blocking** — All refreshes are fire-and-forget: event handlers return instantly and the fetch runs in the background, so usage checks never delay message flow. Even a stuck request is aborted in the background by `OPENCODE_GO_TIMEOUT_MS`
+- **Configurable Refresh TTL** — Refresh cadence follows the `OPENCODE_GO_CACHE_TTL` config (default 300s, clamp 60–3600); a failed fetch enters a 60s cooldown instead of hammering the server on every turn
+- **Graceful Degradation** — On HTTP error, footer shows `<err:code>`; on missing config, footer shows `<err:noconfig>`
+- **Future-proof** — The official API ([PR #16513](https://github.com/anomalyco/opencode/pull/16513)) path is implemented and usable via `OPENCODE_GO_MODE=apikey`; `auto` mode flips to it once the endpoint ships
 
 ## Install
 
@@ -94,7 +95,7 @@ pi install ./
 | Env var | Default | Description |
 |---|---|---|
 | `OPENCODE_GO_BASE_URL` | `https://opencode.ai` | API base URL |
-| `OPENCODE_GO_CACHE_TTL` | `300` | Cache seconds, 60–3600 |
+| `OPENCODE_GO_CACHE_TTL` | `300` | Footer refresh TTL in seconds, 60–3600 |
 | `OPENCODE_GO_MODE` | `auto` | `auto` / `cookie` / `apikey` |
 | `OPENCODE_GO_TIMEOUT_MS` | `10000` | HTTP timeout |
 
@@ -150,9 +151,19 @@ The page renders each usage window as a `data-slot="usage-item"` block; the exte
 
 `updatedAt` (epoch ms) is stamped by `fetchUsage` on every successful fetch and rendered as the footer's `· HH:MM` freshness indicator (local timezone). `useBalance` (whether over-limit usage falls back to your Zen balance) is still parsed but no longer rendered.
 
+### Non-blocking refresh (fire-and-forget)
+
+Usage fetches never sit in the message path. On `session_start`, `model_select` (switch to an `opencode-go/*` model) and `turn_end`, the extension fires a background refresh and returns immediately — the footer updates when the data arrives. This holds even on failure: a stuck request is aborted in the background by `OPENCODE_GO_TIMEOUT_MS`, and message delivery is unaffected.
+
+- Refresh cadence is driven by `OPENCODE_GO_CACHE_TTL` (default 300s); a fresh cache just re-renders the footer without any network call
+- A failed fetch enters a 60s cooldown (footer keeps the last `<err:code>`) instead of retrying every turn
+- Switching away from an `opencode-go/*` model or session shutdown clears the footer and discards any in-flight result; a stale extension context can never throw
+
+*(v0.1–v0.2 used `pi-usage-lib`'s `createUsageExtension` wiring, whose handlers awaited the network fetch inline — this could delay the message pipeline by up to `timeoutMs` per cold fetch. Since v0.3 the cache is self-implemented in `src/usage-cache.ts` and the events are fully non-blocking.)*
+
 ### Official API auto-switch ([anomalyco/opencode#16513](https://github.com/anomalyco/opencode/pull/16513))
 
-The official `GET /zen/go/v1/usage` endpoint (Bearer auth via `ctx.modelRegistry.getApiKeyForProvider("opencode-go")`) is **pre-wired and auto-enabled when the PR ships** — `buildPathList()` already contains the switch logic (apikey path first, cookie/SSR as fallback). Until the PR merges, the apikey endpoint always 404s, so the cookie path is used. No client-side changes are required on your end; watch the PR (or the [tracking workflow](#tracking-the-official-api-pr)) for the switch.
+The official `GET /zen/go/v1/usage` endpoint (Bearer auth via `ctx.modelRegistry.getApiKeyForProvider("opencode-go")`) is **pre-wired**: you can try it today with `OPENCODE_GO_MODE=apikey` (it 404s until the PR merges). In `auto` mode the cookie/SSR path is used; flipping `auto` to apikey-first is a one-line change shipped in the release that follows the PR merge — the tracking workflow below opens an issue the moment the PR merges to prompt it. No client-side changes are required on your end; watch the PR (or the [tracking workflow](#tracking-the-official-api-pr)) for the switch.
 
 ### Tracking the official API PR
 

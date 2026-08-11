@@ -10,10 +10,12 @@ import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 /** Provider prefix used in Pi for OpenCode Go */
 export declare const PROVIDER_PREFIX = "opencode-go";
 /**
- * Return true iff the current model is any `opencode-go/*` model.
+ * Return true iff the model is any `opencode-go/*` model.
  *
  * Defensive against missing fields (model may be undefined during early
  * session_start or after session switches).
  */
+export declare function isOpencodeGoModel(model: ExtensionContext["model"]): boolean;
+/** Return true iff the current ctx model is any `opencode-go/*` model. */
 export declare function isOpencodeGoProvider(ctx: ExtensionContext): boolean;
 //# sourceMappingURL=provider.d.ts.map

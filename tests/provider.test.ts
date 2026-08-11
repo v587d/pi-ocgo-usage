@@ -4,7 +4,7 @@
 
 import { describe, expect, test } from "bun:test"
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent"
-import { isOpencodeGoProvider, PROVIDER_PREFIX } from "../src/provider"
+import { isOpencodeGoModel, isOpencodeGoProvider, PROVIDER_PREFIX } from "../src/provider"
 
 function makeContext(model: ExtensionContext["model"]): ExtensionContext {
   // Build a minimal ExtensionContext. Only `model` is read by isOpencodeGoProvider.
@@ -64,5 +64,38 @@ describe("isOpencodeGoProvider", () => {
         } as unknown as ExtensionContext["model"]),
       ),
     ).toBe(false)
+  })
+})
+
+describe("isOpencodeGoModel", () => {
+  test("matches when provider === 'opencode-go'", () => {
+    expect(
+      isOpencodeGoModel({
+        provider: "opencode-go",
+        id: "kimi-k3",
+        name: "Kimi K3",
+      } as unknown as ExtensionContext["model"]),
+    ).toBe(true)
+  })
+
+  test("matches when model id has opencode-go/ prefix", () => {
+    expect(
+      isOpencodeGoModel({
+        provider: "some-other",
+        id: "opencode-go/kimi-k3",
+        name: "Kimi K3",
+      } as unknown as ExtensionContext["model"]),
+    ).toBe(true)
+  })
+
+  test("returns false for unrelated models and undefined", () => {
+    expect(
+      isOpencodeGoModel({
+        provider: "anthropic",
+        id: "claude-sonnet-4-5",
+        name: "Claude",
+      } as unknown as ExtensionContext["model"]),
+    ).toBe(false)
+    expect(isOpencodeGoModel(undefined)).toBe(false)
   })
 })

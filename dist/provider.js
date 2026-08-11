@@ -9,13 +9,12 @@
 /** Provider prefix used in Pi for OpenCode Go */
 export const PROVIDER_PREFIX = "opencode-go";
 /**
- * Return true iff the current model is any `opencode-go/*` model.
+ * Return true iff the model is any `opencode-go/*` model.
  *
  * Defensive against missing fields (model may be undefined during early
  * session_start or after session switches).
  */
-export function isOpencodeGoProvider(ctx) {
-    const model = ctx.model;
+export function isOpencodeGoModel(model) {
     if (!model)
         return false;
     if (model.provider === PROVIDER_PREFIX)
@@ -23,5 +22,9 @@ export function isOpencodeGoProvider(ctx) {
     if (typeof model.id === "string" && model.id.startsWith(`${PROVIDER_PREFIX}/`))
         return true;
     return false;
+}
+/** Return true iff the current ctx model is any `opencode-go/*` model. */
+export function isOpencodeGoProvider(ctx) {
+    return isOpencodeGoModel(ctx.model);
 }
 //# sourceMappingURL=provider.js.map

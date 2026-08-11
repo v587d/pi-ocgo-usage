@@ -13,15 +13,19 @@ import type { ExtensionContext } from "@earendil-works/pi-coding-agent"
 export const PROVIDER_PREFIX = "opencode-go"
 
 /**
- * Return true iff the current model is any `opencode-go/*` model.
+ * Return true iff the model is any `opencode-go/*` model.
  *
  * Defensive against missing fields (model may be undefined during early
  * session_start or after session switches).
  */
-export function isOpencodeGoProvider(ctx: ExtensionContext): boolean {
-  const model = ctx.model
+export function isOpencodeGoModel(model: ExtensionContext["model"]): boolean {
   if (!model) return false
   if (model.provider === PROVIDER_PREFIX) return true
   if (typeof model.id === "string" && model.id.startsWith(`${PROVIDER_PREFIX}/`)) return true
   return false
+}
+
+/** Return true iff the current ctx model is any `opencode-go/*` model. */
+export function isOpencodeGoProvider(ctx: ExtensionContext): boolean {
+  return isOpencodeGoModel(ctx.model)
 }

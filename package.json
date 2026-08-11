@@ -1,6 +1,6 @@
 {
   "name": "pi-ocgo-usage",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Pi extension for monitoring OpenCode Go subscription usage quota in the footer",
   "type": "module",
   "main": "./dist/index.js",
